@@ -1,467 +1,271 @@
 import requests
-import json
-from cache_utils import cached
+import urllib
+import os
 import time
+import pickle
+from dataclasses import dataclass, field
 
-auth_token = "utilizador.rest"
-debug = "honey:core-sdk:*"
+@dataclass
+class Stop:
+    id: str    # unique (number)
+    name: str
+    lat: float
+    lon: float
+    sequence: int  # order in the route
 
-# get timeTable for a specific route
+@dataclass
+class StopTimes:
+    stop: Stop
+    times: list[str]
 
-@cached(folder="routes")
-def get_route_time_table(route_id, way_id, start_date):
-    """Returns a list of dictionaries of the form
-    [
-        stop_id: {
-            hour: [minute, minute, minute, ...],
-        }
-        ,
-        ...
-    ]
-    """
-    url = "https://cache.geobus.pt/admin-ajax.php"
+@dataclass
+class RouteStops:
+    stops: list[Stop]
+
+@dataclass
+class Way:
+    id: str
+    name: str
+    stops: list[Stop] = field(init=False, default_factory=list)
+    timetable: dict[str, StopTimes] = field(init=False, default_factory=dict)  # key is the day
+    _has_stops: bool = field(init=False, default=False)
+    _has_timetable: bool = field(init=False, default=False)
+
+    def set_stops(self, stops: list[Stop]):
+        self.stops = stops
+        self._has_stops = True
+    
+    def add_timetable(self, day: str, stop_times: StopTimes):
+        self.timetable[day] = stop_times
+        if not self._has_timetable:
+            self._has_timetable = True
+
+@dataclass
+class Route:
+    id: str
+    name: str
+    destination: str
+    origin: str
+    ways: list[Way] = field(init=False, default_factory=list)
+    _has_ways: bool = field(init=False, default=False)
+
+    def set_ways(self, ways: list[Way]):
+        self.ways = ways
+        self._has_ways = True
+
+@dataclass
+class Line:
+    id: str
+    name: str
+    routes: list[Route] = field(init=False, default_factory=list)
+    _has_routes: bool = field(init=False, default=False)
+
+def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
+    """Cache the request in a file with the same name as the url"""
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
+    filename = urllib.parse.urlencode(params) + ".pkl"
+    filename = os.path.join(cache_dir, filename)
+    try:
+        with open(filename, "rb") as f:
+            response = pickle.load(f)
+    except FileNotFoundError:
+        response = requests.request("GET", url, params=params)
+        if not response.ok:
+            print(f"Error {response.status_code} for {params}")
+            raise requests.exceptions.ConnectionError
+        with open(filename, "wb") as f:
+            pickle.dump(response, f)
+    return response
+
+def get_all_lines() -> list[Line]:
+    url = "https://horarios.carrismetropolitana.pt"
     querystring = {
-        "action":"carris_get_route_timetable2",
-        "route_id":route_id,
-        "way_id":way_id,
-        "start_date":start_date
+        "action":"cmet_get_all_lines"
     }
     try:
-        response = requests.request("GET", url, params=querystring, headers={'Authorization': auth_token})
-    except requests.exceptions.ConnectionError:
-        print("Error getting route time table")
-        return []
-    if not response.ok:
-        if "Please slow down." in response.text:
-            time.sleep(1)
-            return get_route_time_table(route_id, way_id, start_date)
-        print("Error getting route time table")
-        return []
-    time_table = response.json()['timetable']
-    # if time_table is a dictionary, its keys will be integers, so just return a list with the values
-    if isinstance(time_table, dict):
-        return list(time_table.values())
-    return time_table
-
-@cached(folder="ways")
-def get_route_ways(route_id):
-    """Gets each way of a route in a list of dictionaries.
-    [
-        {
-            id: name,
-        }
-    ]
-    """
-    url = "https://cache.geobus.pt/admin-ajax.php"
-    querystring = {
-        "action": "carris_get_route_ways",
-        "route_id":route_id
-    }
-    try:
-        response = requests.request("GET", url, params=querystring, headers={'Authorization': auth_token})
-    except requests.exceptions.ConnectionError:
-        print("Error getting route ways")
-        return []
-    ways = []
-    if not response.ok:
-        if "Please slow down." in response.text:
-            time.sleep(1)
-            return get_route_ways(route_id)
-        print("Error getting route ways")
-        return []
-    for way in response.json():
-        way_id = way['id']
-        way_name = way['nome']
-        ways.append({
-            way_id: way_name
-        })
-    return ways
-
-@cached(folder="stop-names")
-def get_stop_name_by_id(stop_id):
-    url = "https://cache.geobus.pt/admin-ajax.php"
-    querystring = {
-        "action":"carris_get_stop_name_by_id",
-        "stop_id":stop_id
-    }
-    try:
-        response = requests.request("GET", url, params=querystring, headers={'Authorization': auth_token})
-    except requests.exceptions.ConnectionError:
-        print("Error getting stop name")
-        return None
-    return response.text
-
-@cached(folder="lines")
-def get_all_lines():
-    """Returns a list of all routes.
-    Each route is a dictionary. Its the key is the route id and the value is the route name.
-    {
-        id: name,
-    }
-    """
-    url = "https://cache.geobus.pt/admin-ajax.php"
-    querystring = {
-        "action":"carris_get_all_lines"
-    }
-    try:
-        response = requests.request("GET", url, params=querystring, headers={
-                                'Authorization': auth_token})
+        response = _cached_request(url, params=querystring)
     except requests.exceptions.ConnectionError:
         print("Connection error")
         return []
-    # save the response in a json file
-    with open('linhas.json', 'w') as outfile:
-        json.dump(response.json(), outfile)
 
-    # example of element in the list
-    #     {
-    #    "id": "1007",
-    #    "text": "<span class=\"line-number\" style=\"background-color: rgb(237,25,68);\">1007</span> <span class=\"line-name\">Amadora (Esta\u00e7\u00e3o Norte) | Circular madrugada</span>"
-    #}
-    # extract only the line number and name
+    # example response.text:
+    # '[
+    # {"id":"1001","line_id":"1001","line_name":"Alfragide (Estrada do Seminario) - Reboleira (Esta\\u00e7\\u00e3o)","text":"<span class=\\"line-number\\" style=\\"background-color: rgb(250,50,80);\\">1001<\\/span> <span class=\\"line-name\\">Alfragide (Estrada do Seminario) - Reboleira (Esta\\u00e7\\u00e3o)<\\/span>"},
+    # {"id":"1002","line_id":"1002","line_name":"Alfragide (Igreja) - Amadora (Esta\\u00e7\\u00e3o Norte)","text":"<span class=\\"line-number\\" style=\\"background-color: rgb(250,50,80);\\">1002<\\/span> <span class=\\"line-name\\">Alfragide (Igreja) - Amadora (Esta\\u00e7\\u00e3o Norte)<\\/span>"},
+    # {"id":"1003","line_id":"1003","line_name":"Amadora (Esta\\u00e7\\u00e3o Norte) - Amadora Este (Metro)","text":"<span class=\\"line-number\\" style=\\"background-color: rgb(250,50,80);\\">1003<\\/span> <span class=\\"line-name\\">Amadora (Esta\\u00e7\\u00e3o Norte) - Amadora Este (Metro)<\\/span>"}
+    # ]'
+
+    # convert the response to a list of lines
     lines = []
     for line in response.json():
+        if line['line_id'] != line['id']:
+            print(f"line_id != id: {line['line_id']} != {line['id']}")
         line_id = line['id']
-        line_name = line['text'].split('<span class="line-name">')[1].split('</span>')[0]
-        lines.append({
-            line_id: line_name
-        })
+        line_name = line['line_name']
+        lines.append(Line(line_id, line_name))
+    
     return lines
 
-@cached(folder="line-routes")
-def get_line_routes(line_id):
-    """Returns a list of routes for a specific line, and its ways
-    Each route is a dictionary. Its the key is the route id and the value is the route name.
-    {
-        id: {
-            name: name,
-            ways: ways (list of dictionaries {way_id: way_name})
-            description: description (dict)
-        }
-    }
-    """
-    url = "https://cache.geobus.pt/admin-ajax.php"
+def get_line_routes(line: Line) -> list[Route]:
+    url = "https://horarios.carrismetropolitana.pt"
     querystring = {
-        "action": "carris_get_line_routes2",
-        "line_id":line_id
+        "action": "cmet_get_line_routes",
+        "line_id": line.id
     }
     try:
-        response = requests.request("GET", url, params=querystring, headers={
-                                'Authorization': auth_token})
+        response = _cached_request(url, params=querystring)
     except requests.exceptions.ConnectionError:
         print("Connection error")
         return []
 
-    response_ways = response.json()['ways']
+    response_ways = response.json()['ways'] # only returns the ways for the first route
     response_routes = response.json()['routes']
 
-    routes = []
+    routes: list[Route] = []
+    first_route = True
     for route in response_routes:
+        if line.id != route['line_id']:
+            print(f"line_id != id: {line.id} != {route['line_id']}")
+
         route_id = route['route_id']
         route_name = route['name']
-        route_description = route
-        route_ways = []
-        for way in response_ways:
-            if way['id'].startswith(route_id):
-                route_ways.append({
-                    way['id']: way['nome']
-                })
-        routes.append({
-            route_id: {
-                'name': route_name,
-                'ways': route_ways,
-                'description': route_description
-            }
-        })
+        route_origin = route['origin']
+        route_destination = route['destination']
+        routes.append(Route(route_id, route_name, route_destination, route_origin))
+
+        if first_route:
+            route_ways = []
+            for way in response_ways:
+                way_id = way['id']
+                way_name = way['nome']
+                route_ways.append(Way(way_id, way_name))
+            routes[0].set_ways(route_ways)
+            first_route = False
+        else:
+            ways = get_route_ways(routes[-1])
+            routes[-1].set_ways(ways)
 
     return routes
 
-@cached(folder="route-stops")
-def get_route_stops(route_id, way_id, start_date, time_chosen):
-    """Returns a list of stops for a specific route and way
-    Each stop is a dictionary. Its the key is the stop id and the value is the stop name.
-    {
-        id: name,
-    }
-    """
-    url = "https://cache.geobus.pt/admin-ajax.php"
+def get_route_ways(route: Route) -> list[Way]:
+    if route._has_ways:
+        return route.ways
+    
+    url = "https://horarios.carrismetropolitana.pt"
     querystring = {
-        "action": "carris_get_route_stops",
-        "route_id":route_id,
-        "way_id":way_id,
-        "start_date": start_date,
-        "time_choosen": time_chosen
+        "action": "cmet_get_route_ways",
+        "route_id": route.id
     }
     try:
-        response = requests.request("GET", url, params=querystring, headers={
-                                'Authorization': auth_token})
+        response = _cached_request(url, params=querystring)
     except requests.exceptions.ConnectionError:
         print("Connection error")
         return []
+
+    ways = []
+    for way in response.json():
+        way_id = way['id']
+        way_name = way['nome']
+        ways.append(Way(way_id, way_name))
+
+    return ways
+
+
+def get_route_stops(route: Route, way: Way, start_date: str) -> list[Stop]:
+    """Returns a list of stops for a specific way in a route.
+    start_date is a string in the format "YYYY-MM-DD" and is used to get the stops for a specific day.
+    """
+    url = "https://horarios.carrismetropolitana.pt"
+    querystring = {
+        "action": "cmet_get_route_stops",
+        "route_id": route.id,
+        "way_id": way.id,
+        "start_date": start_date
+    }
+    try:
+        response = _cached_request(url, params=querystring)
+    except requests.exceptions.ConnectionError:
+        print("Connection error")
+        return []
+    response_stops = response.json()['stops']
+    response_hours = response.json()['hours']
     stops = []
-    if not response.ok:
-        print(response.text)
-        print(f"'{response.text}' at {route_id} {way_id} {start_date} {time_chosen}")
-        if "Please slow down." in response.text:
-            time.sleep(1)
-            return get_route_stops(route_id, way_id, start_date, time_chosen)
-        return stops
-    for stop in response.json()['stops']:
+    for stop in response_stops:
         stop_id = stop['stop_id']
-        stops.append({
-            stop_id: stop
-        })
+        stop_name = stop['stop_name']
+        stop_lat = stop['stop_lat']
+        stop_lon = stop['stop_lon']
+        stop_sequence = int(stop['stop_sequence'])
+        new_stop = Stop(stop_id, stop_name, stop_lat, stop_lon, stop_sequence)
+        if new_stop not in stops:
+            stops.append(new_stop)
     return stops
 
-
-def match_lines_containing(match, lines_to_match, type='name'):
-    """Returns a list of routes whose name contains the match string.
-    """
-    matched_lines = []
-    for line in lines_to_match:
-        for line_id, line_name in line.items():
-            if type == 'id':
-                if match in line_id:
-                    matched_lines.append(line)
-            elif type == 'name':
-                if match in line_name:
-                    matched_lines.append(line)
-            else:
-                raise ValueError("Invalid type. Must be 'id' or 'name")
-
-    return matched_lines
-
-def get_lines_with_stop(stop_id_search, lines):
-    """Returns a list of routes that have a stop with the given id.
-    """
-    lines_with_stop = []
-    error_lines = []
-    for line in lines:
-        line_id, line_name = list(line.items())[0]
-        routes = get_line_routes(line)
-        for route in routes:
-            for route_id, route_info in route.items():
-                if line in error_lines: # debug stuff
-                    continue
-
-                if "Circular" in line_name:
-                    continue
-
-                if not route_info['ways']:
-                    ways = get_route_ways(route_id)
-                    if not ways:
-                        print("Error retrieving ways on route: " + route_id + " - " + route_info['name'])
-                        error_lines.append(line)
-                        if line_id.startswith('280'):
-                            print(line_name)
-                            print(f"[ways fail] route_id: {route_id}")
-                        continue
-                    way = ways[0]
-                    
-                else:
-                    way = routes[0][list(route.keys())[0]]['ways'][0]
-
-                way_id = list(way.keys())[0]
-
-                time_table = get_route_time_table(route_id, way_id, start_date)
-
-                if not time_table:
-                    print("Error retrieving time table on route: " + route_id + " - " + route_info['name'])
-                    error_lines.append(line)
-                    if line_id.startswith('274') or line_id.startswith('280'):
-                        print(line_name)
-                        print(f"[time-table fail] route_id, way_id, start_date: {route_id}, {way_id}, {start_date}")
-                    continue
-
-                idx_find = 0
-                if line_id.startswith('280') or line_id.startswith('274'):
-                    idx_find = 1
-                
-                stop_id = list(time_table[idx_find].keys())[0]
-                possible_times = time_table[idx_find][stop_id]
-                # a key from possible_times
-                hour_chosen = list(possible_times.keys())[0]
-                minute_chosen = possible_times[hour_chosen][0]
-                time_chosen = f"{int(hour_chosen):02}:{int(minute_chosen):02}"
-
-                stops = get_route_stops(route_id, way_id, start_date, time_chosen)
-
-                if not stops:
-                    print("Error retrieving stops on route: " + route_id + " - " + route_info['name'])
-                    error_lines.append(line)
-                    if line_id.startswith('274') or line_id.startswith('280'):
-                        print(line_name)
-                        print(f"[stops fail] route_id, way_id, start_date, time_chosen: {route_id}, {way_id}, {start_date}, {time_chosen}")
-                    continue
-
-                for stop in stops:
-                    for stop_id, stop_info in stop.items():
-                        if stop_id == stop_id_search:
-                            lines_with_stop.append(line)
-                            print(len(lines_with_stop))
-    return lines_with_stop, error_lines
-
-def find_way_where_origin_before_destination(route, origin_stop_id, dest_stop_id):
-    for route_id, route_info in route.items():
-        ways = route_info['ways']
-
-        if not ways:
-                ways = get_route_ways(route_id)
-                if not ways:
-                    print("Error retrieving ways on route: " +
-                        route_id + " - " + route_info['name'])
-                    continue
-
-        print(f"ways: {ways}")
-        for way in ways:
-            print(f"way: {way}")
-            way_id = list(way.keys())[0]
-            time_table = get_route_time_table(
-                route_id, way_id, start_date)
-            gotoNextWay = False
-            origin_found = False
-            dest_found = False
-            for stopAndTime in time_table:
-                for stop_id, possible_times in stopAndTime.items():
-                    if stop_id == origin_stop_id:
-                        origin_found = True
-                    elif stop_id == dest_stop_id:
-                        dest_found = True
-                        if origin_found:
-                            return way
-                        else:
-                            gotoNextWay = True
-                            break
-                if gotoNextWay:
-                    break
-    return None
-
-def convert_time_table_to_list(time_table):
-    """Returns a list of times from the time table.
-    """
-    times = []
-    for stopAndTime in time_table:
-        for stop_id, possible_times in stopAndTime.items():
-            for hour, minutes in possible_times.items():
-                for minute in minutes:
-                    times.append((f"{int(hour):02}:{int(minute):02}"))
-    return times
-
-def print_time_table_stops(time_table):
-    for stopAndTime in time_table:
-        for stop_id, possible_times in stopAndTime.items():
-            print(stop_id)
+def get_route_time_table(route: Route, way: Way, start_date: str) -> list[StopTimes]:
+    url = "https://horarios.carrismetropolitana.pt"
+    querystring = {
+        "action": "cmet_get_route_timetable",
+        "route_id": route.id,
+        "way_id": way.id,
+        "start_date": start_date
+    }
+    try:
+        # get url-encoded string with the query parameters
+        response = _cached_request(url, params=querystring)
+    except requests.exceptions.ConnectionError:
+        print("Error getting route time table")
+        return []
+    time_table_response = response.json()['timetable']
     
+    time_table = [None]*len(way.stops)
 
+    if len(time_table_response) != len(way.stops):
+        print(f"time_table_response and way.stops have different lengths ({len(time_table_response)} != {len(way.stops)})")
+        return []
 
-def get_time_table_from_origin_to_dest(stop_id_origin, stop_id_dest, lines_with_origin_and_dest):
-    """Returns a list of trips that go from the origin to the destination.
+    for stop_sequence, stop in enumerate(time_table_response):
+        # print(f"stop: {stop}")
+        # stop is a dict with {stopId: {hour: [minutes] } }
+        # the dict has only one stopId which is the id of the stop
+        stop_id = list(stop.keys())[0]
+        stop = stop[stop_id]
+        # print(f"stop: {stop}")
+        times = []
+        for idx, hour in enumerate(stop):
+            for minute in stop[hour]:
+                hour = int(hour)
+                minute = int(minute)
+                times.append(f"{hour:02d}:{minute:02d}")
+        # print(f"stop_sequence: {stop_sequence}")
+        # print(f"stop_id: {stop_id}")
+        time_table[int(stop_sequence)] = StopTimes(way.stops[int(stop_sequence)], times)
 
-    """
-    # for each route, the way which has the origin before the destination is chosen.
+    return time_table
 
-    trip = []
+def get_municipalities():
+    url = "https://horarios.carrismetropolitana.pt"
+    querystring = {
+        "action":"cmet_get_municipalities"
+    }
+    try:
+        response = _cached_request(url, params=querystring)
+    except requests.exceptions.ConnectionError:
+        print("Connection error")
+        return []
+    return response
 
-    for line in lines_with_origin_and_dest:    
-        routes = get_line_routes(line)
-        line_id, line_name = list(line.items())[0]
-        for route in routes:
-            correctWay = find_way_where_origin_before_destination(route, stop_id_origin, stop_id_dest)
-            if not correctWay:
-                print("Didn't find a way where the origin is before the destination, on line " + line_name)
-                continue
-            correctWayID, correctWayName = list(correctWay.items())[0]
-            time_table = get_route_time_table(route, correctWayID, start_date)
+if __name__ == "__main__":
+    lines = get_all_lines()
+    
+    line = lines[420] # Mafra (Terminal) - Lisboa (C. Grande) via A8 Venda Pinheiro
 
+    routes = get_line_routes(line)
+    stops = get_route_stops(routes[0], routes[0].ways[0], "2023-01-23")
+    
+    print('\n'.join(str(stop) for stop in stops))
 
-            route_id = list(route.keys())[0]
-            route_info = route[route_id]
-            if not time_table:
-                print("Error retrieving time table on route: " + route_id + " - " + route_info['name'])
-                continue
+    routes[0].ways[0].set_stops(stops)
 
-            origin_possible_times = None
-            dest_possible_times = None
-            for stop in time_table:
-                for stop_id, possible_times in stop.items():
-                    if stop_id == stop_id_origin:
-                        origin_possible_times = possible_times
-                    elif stop_id == stop_id_dest:
-                        dest_possible_times = possible_times                
-            
-            if not origin_possible_times or not dest_possible_times:
-                continue
-            times_origin = []
-            times_dest = []
-            # for each of the possible times, put them in a list
-            for hour_origin, minutes_origin in origin_possible_times.items():
-                for minute_origin in minutes_origin:
-                    times_origin.append(f"{int(hour_origin):02}:{int(minute_origin):02}")
-            for hour_dest, minutes_dest in dest_possible_times.items():
-                for minute_dest in minutes_dest:
-                    times_dest.append(f"{int(hour_dest):02}:{int(minute_dest):02}")
-            
-            for time_origin, time_dest in zip(times_origin, times_dest):
-
-                if '2804_0_1' == correctWayID:
-                    print("found")
-                trip.append((time_origin, time_dest, correctWayID, correctWayName))
-            
-    return trip
-
-start_date = "2023-01-05"
-
-lines = get_all_lines()
-
-# routes = get_line_routes(lines[0])
-# routes = get_line_routes(match_lines_containing('via A21', lines)[0])
-
-# way_example = routes[0][list(routes[0].keys())[0]]['ways'][0]
-# way_id = list(way_example.keys())[0]
-
-# time_table = get_route_time_table(routes[0], way_id, start_date)
-
-# stop_id = list(time_table[0].keys())[0]
-# possible_times = time_table[0][stop_id]
-
-# # a key from possible_times
-# hour_chosen = list(possible_times.keys())[0]
-# minute_chosen = possible_times[hour_chosen][0]
-
-# time_chosen = f"{int(hour_chosen):02}:{int(minute_chosen):02}"
-
-# stops = get_route_stops(routes[0], way_id, start_date, time_chosen)
-
-origin_stops = ["061200", "060337"]
-final_stops = ["080345", "080346"]
-
-lines_match_1 = match_lines_containing("280", lines, type="id")
-lines_match_2 = match_lines_containing("274", lines, type="id")
-
-lines_to_search = lines_match_1 + lines_match_2
-
-lines_with_origin = []
-lines_with_origin_and_destination = []
-
-total_trips = []
-for origin_stop in origin_stops:
-    for final_stop in final_stops:
-        lines_with_origin, error_lines = get_lines_with_stop(origin_stop, lines_to_search)
-        lines_with_origin_and_destination, error_lines2 = get_lines_with_stop(final_stop, lines_with_origin)
-
-        trips = get_time_table_from_origin_to_dest(final_stop, origin_stop, lines_with_origin_and_destination)
-        total_trips = total_trips + trips
-
-
-# sort by time of origin
-total_trips.sort(key=lambda x: x[0])
-
-# remove duplicates
-total_trips = list(dict.fromkeys(total_trips)) 
-
-# save to txt file
-with open('trips.txt', 'w') as f:
-    for trip in total_trips:
-        trip_str = ' - '.join(trip)
-        f.write(f"{trip_str}\n")
+    time_table = get_route_time_table(routes[0], routes[0].ways[0], "2023-01-23")
 

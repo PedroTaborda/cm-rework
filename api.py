@@ -1,9 +1,10 @@
 import requests
 import urllib
 import os
-import time
 import pickle
 from dataclasses import dataclass, field
+
+DAY_FOR_STATIC_DATA = "2023-06-06"
 
 @dataclass
 class Stop:
@@ -12,6 +13,18 @@ class Stop:
     lat: float
     lon: float
     sequence: int  # order in the route
+    _way: "Way" = field(init=False, default=None)
+
+    def __eq__(self, o: object) -> bool:
+        if isinstance(o, Stop):
+            return self.id == o.id
+        return False
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.id}) [{self.sequence} in {self._way.name}]"
+    
+    def __repr__(self) -> str:
+        return self.__str__()
 
 @dataclass
 class StopTimes:
@@ -30,15 +43,57 @@ class Way:
     timetable: dict[str, StopTimes] = field(init=False, default_factory=dict)  # key is the day
     _has_stops: bool = field(init=False, default=False)
     _has_timetable: bool = field(init=False, default=False)
+    _route: "Route" = field(init=False, default=None)
+
+    def in_sequence(self, stop1: Stop, stop2: Stop) -> bool:
+        """Returns True if stop1 is before stop2 in the way.
+        """
+        # find the stops in the way
+        stop1_in_way = None
+        stop2_in_way = None
+        for stop in self.stops:
+            if stop == stop1:
+                stop1_in_way = stop
+            if stop == stop2:
+                stop2_in_way = stop
+            if stop1_in_way is not None and stop2_in_way is not None:
+                break
+        if stop1_in_way is not None and stop2_in_way is not None:
+            return stop1_in_way.sequence < stop2_in_way.sequence
+        else:
+            return False
 
     def set_stops(self, stops: list[Stop]):
         self.stops = stops
         self._has_stops = True
+        for stop in stops:
+            stop._way = self
     
     def add_timetable(self, day: str, stop_times: StopTimes):
         self.timetable[day] = stop_times
         if not self._has_timetable:
             self._has_timetable = True
+    
+    def populate_stops(self):
+        if not self._has_stops:
+            stops = get_route_stops(self._route, self, DAY_FOR_STATIC_DATA)
+            self.set_stops(stops)
+    
+    def populate_timetable(self, route, day):
+        timetable = get_route_time_table(route, self, day)
+        self.add_timetable(day, timetable)
+    
+    def __getattribute__(self, __name: str):
+        if __name == "stops":
+            if not self._has_stops:
+                self.populate_stops()
+        return super().__getattribute__(__name)
+    
+    def __str__(self) -> str:
+        return f"{self.name} ({self.id})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 @dataclass
 class Route:
@@ -51,14 +106,50 @@ class Route:
 
     def set_ways(self, ways: list[Way]):
         self.ways = ways
+        for way in ways:
+            way._route = self
         self._has_ways = True
 
+    def populate_ways(self, day):
+        if not self._has_ways:
+            ways = get_route_ways(self)
+            self.set_ways(ways)
+    
+    def __getattribute__(self, __name: str):
+        if __name == "ways":
+            if not self._has_ways:
+                self.populate_ways()
+        return super().__getattribute__(__name)
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.id})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+            
 @dataclass
 class Line:
     id: str
     name: str
     routes: list[Route] = field(init=False, default_factory=list)
     _has_routes: bool = field(init=False, default=False)
+
+    def populate_routes(self):
+        if not self._has_routes:
+            self.routes = get_line_routes(self)
+            self._has_routes = True
+    
+    def __getattribute__(self, __name: str):
+        if __name == "routes":
+            if not self._has_routes:
+                self.populate_routes()
+        return super().__getattribute__(__name)
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.id})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
     """Cache the request in a file with the same name as the url"""
@@ -76,7 +167,19 @@ def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
             raise requests.exceptions.ConnectionError
         with open(filename, "wb") as f:
             pickle.dump(response, f)
+
     return response
+
+def _delete_cached_request(url: str, params: dict[str, str], cache_dir="cache"):
+    """Delete the cached request"""
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
+    filename = urllib.parse.urlencode(params) + ".pkl"
+    filename = os.path.join(cache_dir, filename)
+    try:
+        os.remove(filename)
+    except FileNotFoundError:
+        pass
 
 def get_all_lines() -> list[Line]:
     url = "https://horarios.carrismetropolitana.pt"
@@ -221,6 +324,7 @@ def get_route_time_table(route: Route, way: Way, start_date: str) -> list[StopTi
     time_table = [None]*len(way.stops)
 
     if len(time_table_response) != len(way.stops):
+        print(f"route: {route.name} - way: {way.name}")
         print(f"time_table_response and way.stops have different lengths ({len(time_table_response)} != {len(way.stops)})")
         return []
 
@@ -242,18 +346,6 @@ def get_route_time_table(route: Route, way: Way, start_date: str) -> list[StopTi
         time_table[int(stop_sequence)] = StopTimes(way.stops[int(stop_sequence)], times)
 
     return time_table
-
-def get_municipalities():
-    url = "https://horarios.carrismetropolitana.pt"
-    querystring = {
-        "action":"cmet_get_municipalities"
-    }
-    try:
-        response = _cached_request(url, params=querystring)
-    except requests.exceptions.ConnectionError:
-        print("Connection error")
-        return []
-    return response
 
 if __name__ == "__main__":
     lines = get_all_lines()

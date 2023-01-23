@@ -17,11 +17,14 @@ class Stop:
 
     def __eq__(self, o: object) -> bool:
         if isinstance(o, Stop):
-            return self.id == o.id
+            return self.id == o.id and self.sequence == o.sequence
         return False
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.id}) [{self.sequence} in {self._way.name}]"
+        if self._way is not None:
+            return f"({self.id}) {self.name} [{self.sequence} in {self._way.name}]"
+        
+        return f"{self.name} ({self.id})"
     
     def __repr__(self) -> str:
         return self.__str__()
@@ -301,6 +304,7 @@ def get_route_stops(route: Route, way: Way, start_date: str) -> list[Stop]:
         stop_lon = stop['stop_lon']
         stop_sequence = int(stop['stop_sequence'])
         new_stop = Stop(stop_id, stop_name, stop_lat, stop_lon, stop_sequence)
+        new_stop._way = way
         if new_stop not in stops:
             stops.append(new_stop)
     return stops
@@ -320,44 +324,56 @@ def get_route_time_table(route: Route, way: Way, start_date: str) -> list[StopTi
         print("Error getting route time table")
         return []
     time_table_response = response.json()['timetable']
-    
-    time_table = [None]*len(way.stops)
+
+    if len(time_table_response) == 0:
+        # no times for this route in this day
+        return []
 
     if len(time_table_response) != len(way.stops):
         print(f"route: {route.name} - way: {way.name}")
         print(f"time_table_response and way.stops have different lengths ({len(time_table_response)} != {len(way.stops)})")
-        return []
 
+    time_table = [None]*max([len(time_table_response), len(way.stops)])
+
+    # sometimes the response is a dict and sometimes it's a list
+    if isinstance(time_table_response, dict):
+        time_table_response = [val for val in time_table_response.values()]
+    
     for stop_sequence, stop in enumerate(time_table_response):
-        # print(f"stop: {stop}")
         # stop is a dict with {stopId: {hour: [minutes] } }
         # the dict has only one stopId which is the id of the stop
         stop_id = list(stop.keys())[0]
         stop = stop[stop_id]
-        # print(f"stop: {stop}")
         times = []
+
         for idx, hour in enumerate(stop):
             for minute in stop[hour]:
                 hour = int(hour)
                 minute = int(minute)
                 times.append(f"{hour:02d}:{minute:02d}")
-        # print(f"stop_sequence: {stop_sequence}")
-        # print(f"stop_id: {stop_id}")
-        time_table[int(stop_sequence)] = StopTimes(way.stops[int(stop_sequence)], times)
-
+        
+        try:
+            time_table[int(stop_sequence)] = StopTimes(way.stops[int(stop_sequence)], times)
+        except IndexError as e:
+            print(f"Tried to access stop_sequence {stop_sequence} in way.stops with length {len(way.stops)}")
+            raise e
     return time_table
 
 if __name__ == "__main__":
     lines = get_all_lines()
     
-    line = lines[420] # Mafra (Terminal) - Lisboa (C. Grande) via A8 Venda Pinheiro
+    lines_with_no_routes = []
+    for line in lines:
+        routes = get_line_routes(line)
 
-    routes = get_line_routes(line)
-    stops = get_route_stops(routes[0], routes[0].ways[0], "2023-01-23")
+        if not routes:
+            lines_with_no_routes.append(line)
+            continue
+
+        stops = get_route_stops(routes[0], routes[0].ways[0], "2023-01-24")
     
-    print('\n'.join(str(stop) for stop in stops))
+        routes[0].ways[0].set_stops(stops)
 
-    routes[0].ways[0].set_stops(stops)
+        time_table = get_route_time_table(routes[0], routes[0].ways[0], "2023-01-24")
 
-    time_table = get_route_time_table(routes[0], routes[0].ways[0], "2023-01-23")
 

@@ -2,8 +2,9 @@ import api
 from typing import Union
 
 
-def match_lines_containing(matches: Union[str, list[str]], lines_to_match: list[api.Line], type='name'):
-    """Returns a list of lines whose name contains the match string.
+def match_lines_containing(matches: Union[str, list[str]], lines_to_match: list[api.Line], type='name') -> list[api.Line]:
+    """Returns a list of lines whose name contains the match string or any of
+    the match strings in the list.
     """
     matched_lines = []
     for line in lines_to_match:
@@ -24,7 +25,7 @@ def match_lines_containing(matches: Union[str, list[str]], lines_to_match: list[
 
     return matched_lines
 
-def get_lines_with_stops_containing(matches: Union[str, list[str]], lines_to_match: list[api.Line], type='name'):
+def get_lines_with_stops_containing(matches: Union[str, list[str]], lines_to_match: list[api.Line], type='name') -> list[api.Line]:
     """Returns a list of lines which have a route containing at least one stop
     whose name contains the match string.
     """
@@ -50,7 +51,7 @@ def get_lines_with_stops_containing(matches: Union[str, list[str]], lines_to_mat
                             matched_lines.append(line)
     return matched_lines
 
-def get_stops_containing(matches: Union[str, list[str]], stops_to_match: list[api.Stop], type='name'):
+def get_stops_containing(matches: Union[str, list[str]], stops_to_match: list[api.Stop], type='name') -> list[api.Stop]:
     """Returns a list of stops whose name contains the match string.
     """
     matched_stops = []
@@ -72,7 +73,7 @@ def get_stops_containing(matches: Union[str, list[str]], stops_to_match: list[ap
                 matched_stops.append(stop)
     return matched_stops
 
-def get_stops_from_lines(lines: list[api.Line]):
+def get_stops_from_lines(lines: list[api.Line]) -> list[api.Stop]:
     """Returns a list of stops from a list of lines.
     """
     stops = []
@@ -84,7 +85,7 @@ def get_stops_from_lines(lines: list[api.Line]):
                         stops.append(stop)
     return stops
 
-def get_ways_with_origin_before_destination(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line]):
+def get_ways_with_origin_before_destination(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line]) -> list[api.Way]:
     """Returns a list of ways which have an origin stop before a destination stop.
     """
     ways = []
@@ -123,7 +124,6 @@ def join_times(times1: list[api.StopTimes]) -> list[api.StopTimes]:
         for time_hhmm in time.times:
             times.append(api.StopTimes(time.stop, [time_hhmm]))
 
-    # sort times
     times.sort(key=lambda x: int(x.times[0].split(':')[0])*60 + int(x.times[0].split(':')[1]))
     return times
 

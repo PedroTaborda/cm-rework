@@ -359,21 +359,3 @@ def get_route_time_table(route: Route, way: Way, start_date: str) -> list[StopTi
             raise e
     return time_table
 
-if __name__ == "__main__":
-    lines = get_all_lines()
-    
-    lines_with_no_routes = []
-    for line in lines:
-        routes = get_line_routes(line)
-
-        if not routes:
-            lines_with_no_routes.append(line)
-            continue
-
-        stops = get_route_stops(routes[0], routes[0].ways[0], "2023-01-24")
-    
-        routes[0].ways[0].set_stops(stops)
-
-        time_table = get_route_time_table(routes[0], routes[0].ways[0], "2023-01-24")
-
-

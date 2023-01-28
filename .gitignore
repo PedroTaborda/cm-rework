@@ -1,7 +1,6 @@
 cache/
 *.json
 *.txt
-*.html
 
 
 # Byte-compiled / optimized / DLL files

@@ -25,13 +25,13 @@ if __name__ == "__main__":
 
     # prior knowledge of line ids may be used to reduce the number of lines to
     # be matched (optional)
-    lines = cmpy.match_lines_containing(
-        line_ids_carapinheira, lines, type='id')
+    #lines = cmpy.match_lines_containing(
+    #    line_ids_carapinheira, lines, type='id')
 
     # get all unique stops from lines (shared stops are not duplicated)
     # there is usually one stop per way, which share the same name, but
     # have different ids
-    stops = cmpy.get_stops_from_lines(lines)
+    stops = cmpy.get_stops_from_lines(None)
 
     # get stops containing the match string
     # this may return many stops, so the user may need to further filter

@@ -1,5 +1,7 @@
 from . import api
 from typing import Union
+import pickle
+import os
 
 
 def match_lines_containing(matches: Union[str, list[str]], lines_to_match: list[api.Line], type='name') -> list[api.Line]:
@@ -73,9 +75,11 @@ def get_stops_containing(matches: Union[str, list[str]], stops_to_match: list[ap
                 matched_stops.append(stop)
     return matched_stops
 
-def get_stops_from_lines(lines: list[api.Line]) -> list[api.Stop]:
+def get_stops_from_lines(lines: Union[list[api.Line], None]) -> list[api.Stop]:
     """Returns a list of stops from a list of lines.
     """
+    if lines is None:
+        return get_all_stops()
     stops = []
     for line in lines:
         for route in line.routes:
@@ -84,6 +88,31 @@ def get_stops_from_lines(lines: list[api.Line]) -> list[api.Stop]:
                     if stop not in stops:
                         stops.append(stop)
     return stops
+
+
+def get_all_stops(cache_dir="cache") -> list[api.Stop]:
+    """Returns a list of all stops. Cache the result, as it is static and slow to
+    retrieve.
+    """
+    cache_file = os.path.join(cache_dir, "stops.pickle")
+    if os.path.exists(cache_file):
+        with open(cache_file, "rb") as f:
+            stops = pickle.load(f)
+    else:
+        stops = []
+        i = 0
+        for line in api.get_all_lines():
+            for route in line.routes:
+                for way in route.ways:
+                    for stop in way.stops:
+                        if stop not in stops:
+                            stops.append(stop)
+                            i += 1
+                            print(f"{i}")
+        with open(cache_file, "wb") as f:
+            pickle.dump(stops, f)
+    return stops
+
 
 def get_ways_with_origin_before_destination(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line]) -> list[api.Way]:
     """Returns a list of ways which have an origin stop before a destination stop.

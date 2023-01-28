@@ -100,19 +100,15 @@ def get_all_stops(cache_dir="cache") -> list[api.Stop]:
             stops = pickle.load(f)
     else:
         stops = []
-        i = 0
         for line in api.get_all_lines():
             for route in line.routes:
                 for way in route.ways:
                     for stop in way.stops:
                         if stop not in stops:
                             stops.append(stop)
-                            i += 1
-                            print(f"{i}")
         with open(cache_file, "wb") as f:
             pickle.dump(stops, f)
     return stops
-
 
 def get_ways_with_origin_before_destination(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line]) -> list[api.Way]:
     """Returns a list of ways which have an origin stop before a destination stop.

@@ -47,24 +47,6 @@
                 </div>
                 <script>
                     var stops = [];
-                    {# 
-                    const stops = [
-                        {
-                            "name": "Aeroporto",
-                            "id": "0001",
-                            "lat": 38.774,
-                            "lon": -9.134,
-                            "location-identifiers": "Lisboa"
-                        },
-                        {
-                            "name":  "Alameda",
-                            "id":  "0002",
-                            "lat":  38.737,
-                            "lon":  -9.130,
-                            "location-identifiers":  "Lisboa"
-                        }
-                    ] 
-                    #}
                     var currentOriginStop = null;
                     var currentDestinationStop = null;
 
@@ -353,27 +335,16 @@
                             // go to /timetable page, using GET with origin, destination and date
                             window.location.href = "/timetable?origin=" + currentOriginStop['id'] + "&destination=" + currentDestinationStop['id'] + "&date=" + depart;
 
-                            {# 
-                                $.ajax({
-                                url: "/timetable",
-                                type: "GET",
-                                data: {
-                                    origin: currentOriginStop['id'],
-                                    destination: currentDestinationStop['id'],
-                                    date: depart
-                                },
-                                dataType: "json",
-                                success: function (data) {
-                                    displayTimetable(data);
-                                },
-                                error: function (xhr, status, error) {
-                                    console.log("Error: " + error.message);
-                                }
-                            }); 
-                            #}
+                            // do not let user click search again
+                            btn = document.getElementById("search-btn");
+                            btn.disabled = true;
+                            btn.innerHTML = "A PROCURAR...";
+                            btn.style.backgroundColor = "grey";
+                            btn.style.cursor = "not-allowed";
+
                         }
                     </script>
-                    <button class="btn-search" type="button" onclick="searchBtnAction()">PROCURAR</button>
+                    <button class="btn-search" type="button" id="search-btn" onclick="searchBtnAction()">PROCURAR</button>
                 </div>
             </div>
         </form>

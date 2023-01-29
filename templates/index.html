@@ -144,25 +144,25 @@
                             // use fuzzysort to search for matches
                             let results = fuzzysort.go(val, stops, { limit: 50, allowTypo: true, keys: ['name', 'id', 'location'] });
 
-                            let offset = 0;
                             // highlight matches
                             for (i = 0; i < results.length && a.childNodes.length < 5 ; i++) {
                                 // check if there is a stop with the same name
                                 // in the results, and if so, add the extra id
                                 let removed = false;
                                 let j;
-                                for (j = i - 1 - offset; j >= 0; j--) {
+                                for (j = i - 1; j >= 0; j--) {
                                     if (results[j].obj.name == results[i].obj.name) {
                                         a.childNodes[j].innerHTML += ", " + results[i].obj.id;
                                         a.childNodes[j].innerHTML += "<input type='hidden' value='" + results[i].obj.id + "'>";
-                                        // results.splice(i - offset, 1);
-                                        offset++;
+                                        results.splice(i, 1);
                                         removed = true;
+                                        i--;
                                         break;
                                     }
                                 }
-                                if (removed)
+                                if (removed){
                                     continue;
+                                }
 
                                 stopDiv = stopToDiv(results[i]);
                                 a.appendChild(stopDiv);

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Horário</title>
+    <link href="css/main.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: poppins, sans-serif;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="back-btn">
+        <span><a href="/">Voltar</a></span>
+    </div>
+    <style>
+        #back-btn {
+            padding: 10px;
+            color: #ffdc04;
+            background-color: #000000;
+            font-family: poppins, sans-serif;
+            font-size: 20px;
+            text-align: center;
+            display: inline;
+        }
+
+        #back-btn a {
+            color: #ffdc04;
+            text-decoration: none;
+        }
+
+        #back-btn a:hover {
+            color: #ffdc04;
+            text-decoration: none;
+        }
+    </style>
+    <h1>A Mostrar Horário</h1>
+    <h2>Da paragem: {{ origin.name }} ({{origin.id}})</h1>
+    <h2>Para a paragem: {{ destination.name }} ({{destination.id}})</h1>
+
+    <div id="time">
+        <table class="timetable">
+            <thead class="fields">
+                <tr>
+                    <th class="departure">Partida</th>
+                    <th class="arrival">Chegada</th>
+                    <th class="line">Linha</th>
+                    <th class="route">Variante</th>
+                    <th class="way">Sentido</th>
+                </tr>
+            </thead>
+            <tbody class="trips">
+                {% for trip in trips %}
+                <tr>
+                    <td class="departure">{{ trip.t0 }}</td>
+                    <td class="arrival">{{ trip.tf }}</td>
+                    <td class="line">{{ trip.lineId }}</td>
+                    <td class="route">{{ trip.route }}</td>
+                    <td class="way">{{ trip.way }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <style>
+                .timetable {
+                    border-collapse: collapse;
+                    font-family: poppins, sans-serif;
+                    background-size: cover;
+                    background-position: center center;
+                    padding: 15px;
+                    margin: 0 auto;
+                    width: 100%;
+                }
+
+
+
+                .timetable td,
+                .timetable th {
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                    height: 50px;
+                }
+
+                .timetable tr:nth-child(even) {
+                    background-color: #f5f5f5;
+                }
+
+                .timetable tr:hover {
+                    background-color: #ddd;
+                }
+
+                .timetable th {
+                    padding-top: 12px;
+                    padding-bottom: 12px;
+                    text-align: left;
+                    background-color: #000000;
+                    color: #ffdc04;
+                }
+            </style>
+            {#
+            <script>
+                // if any row needs more than one line, remove "route" column
+                // run this on page load and on resize
+                var rows = document.querySelectorAll(".trips tr");
+                var max = 0;
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i];
+                    var cells = row.querySelectorAll("td");
+                    if (cells.length > max) {
+                        max = cells.length;
+                    }
+                }
+                if (max > 5) {
+                    var fields = document.querySelector(".fields");
+                    var route = fields.querySelector(".route");
+                    route.style.display = "none";
+                }
+            </script> #}
+        </table>
+    </div>
+</body>
+
+</html>

@@ -313,7 +313,10 @@
                                 }
                             }
                             // go to /timetable page, using GET with origin, destination and date
-                            $.ajax({
+                            window.location.href = "/timetable?origin=" + currentOriginStop['id'] + "&destination=" + currentDestinationStop['id'] + "&date=" + depart;
+
+                            {# 
+                                $.ajax({
                                 url: "/timetable",
                                 type: "GET",
                                 data: {
@@ -328,7 +331,8 @@
                                 error: function (xhr, status, error) {
                                     console.log("Error: " + error.message);
                                 }
-                            });
+                            }); 
+                            #}
                         }
                     </script>
                     <button class="btn-search" type="button" onclick="searchBtnAction()">PROCURAR</button>

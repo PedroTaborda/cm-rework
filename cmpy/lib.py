@@ -94,7 +94,7 @@ def get_all_stops(cache_dir="cache") -> list[api.Stop]:
     """Returns a list of all stops. Cache the result, as it is static and slow to
     retrieve.
     """
-    cache_file = os.path.join(cache_dir, "stops.pickle")
+    cache_file = os.path.join(cache_dir, "stops.pkl")
     if os.path.exists(cache_file):
         with open(cache_file, "rb") as f:
             stops = pickle.load(f)

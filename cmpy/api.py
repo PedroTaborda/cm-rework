@@ -13,6 +13,7 @@ class Stop:
     lat: float
     lon: float
     sequence: int  # order in the route
+    location_identifiers: list[str] = field(init=False, default_factory=list)
     _way: "Way" = field(init=False, default=None)
 
     def __eq__(self, o: object) -> bool:

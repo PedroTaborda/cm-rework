@@ -5,15 +5,7 @@ import cmpy
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-# for css, javascript, images, etc.
-@app.route('/<path:path>.<ext>')
-def static_files(path, ext):
-    return app.send_static_file(path + '.' + ext)
-
+lines = cmpy.get_all_lines()
 stops = cmpy.get_all_stops()
 sendable_stops = []
 for stop in stops:
@@ -35,11 +27,81 @@ for stop in stops:
 sendable_stops.sort(key=lambda x: x['name'])
 
 
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/timetable', methods=['GET'])
+def get_timetable():
+    # get origin and destination
+    originId = request.args.get('origin')
+    destinationId = request.args.get('destination')
+    # date comes in YYYY-MM-DD
+    date = request.args.get('date')
+    raw = request.args.get('raw')
+
+
+    print(f"origin: {originId}, destination: {destinationId}, date: {date}, raw: {raw}")
+
+    origin = cmpy.get_stops_containing([originId], stops, type='id')[0]
+    destination = cmpy.get_stops_containing(
+        [destinationId], stops, type='id')[0]
+    
+    origins = cmpy.get_stops_containing([origin.name], stops)
+    destinations = cmpy.get_stops_containing([destination.name], stops)
+
+    # get time table from origin to destination
+    trips = cmpy.get_trips(
+        origins, destinations, lines, date)
+
+    # convert to sendable format
+    sendable_trips = []
+    for trip in trips:
+        sendable_trips.append(
+            {
+                't0': trip.origin_time,
+                'tf': trip.destination_time,
+                'way': trip.way.name,
+                'route' : trip.way._route.name,
+                'lineId': trip.way._route._line.id
+            }
+        )
+
+    raw_trips: dict = {
+        'origin': {
+            'id': origin.id,
+            'name': origin.name,
+            'lat': origin.lat,
+            'lon': origin.lon,
+            'location-identifiers': origin.location_identifiers,
+        },
+        'destination': {
+            'id': destination.id,
+            'name': destination.name,
+            'lat': destination.lat,
+            'lon': destination.lon,
+            'location-identifiers': destination.location_identifiers,
+        },
+        'trips': sendable_trips
+    }
+
+    if raw is not None:
+        return raw_trips.__str__()
+    
+    return render_template('timetable.html', origin=origin, destination=destination, trips=sendable_trips)
+
+# for css, javascript, images, etc.
+@app.route('/<path:path>.<ext>')
+def static_files(path, ext):
+    return app.send_static_file(path + '.' + ext)
+
 # list with all stops
 @app.route('/stops')
 def get_stops():
     return sendable_stops
 
+
 if __name__ == '__main__':
     # run on port 1722 on 0.0.0.0
-    app.run(host="0.0.0.0", port=1722)
+    app.run(host="0.0.0.0", port=1722, debug=True)

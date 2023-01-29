@@ -124,10 +124,11 @@ def get_ways_with_origin_before_destination(origins: list[api.Stop], destination
     return ways
 
 
-def get_time_table_from_origin_to_destination(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line], day: str) -> list[api.StopTimes]:
-    """Returns a list of times from a list of lines for a given day.
+def get_trips(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line], day: str) -> list[api.Trip]:
+    """Returns a list of trips from a list of lines for a given day, which
+    contain an origin stop before a destination stop.
     """
-    times = []
+    trips = []
     for line in lines:
         for route in line.routes:
             for way in route.ways:
@@ -135,11 +136,18 @@ def get_time_table_from_origin_to_destination(origins: list[api.Stop], destinati
                     for destination in destinations:
                         if way.in_sequence(origin, destination):
                             time_table = api.get_route_time_table(way._route, way, day)
-                            # get times for origin
+                            # get times for origin and destination stops
                             for stop_time in time_table:
                                 if stop_time.stop == origin:
-                                    times.append(stop_time)
-    return times
+                                    origin_times = stop_time.times
+                                if stop_time.stop == destination:
+                                    destination_times = stop_time.times
+                            # get trips for each origin/destination time
+                            for origin_time, destination_time in zip(origin_times, destination_times):
+                                trips.append(api.Trip(origin, destination, origin_time, destination_time, way))
+
+    trips.sort(key=lambda x: int(x.origin_time.split(':')[0])*60 + int(x.origin_time.split(':')[1]))
+    return trips
 
 def join_times(times1: list[api.StopTimes]) -> list[api.StopTimes]:
     """Joins a list of StopTimes objects into a single list of times.

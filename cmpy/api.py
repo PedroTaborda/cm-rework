@@ -106,6 +106,7 @@ class Route:
     origin: str
     ways: list[Way] = field(init=False, default_factory=list)
     _has_ways: bool = field(init=False, default=False)
+    _line: "Line" = field(init=False, default=None)
 
     def set_ways(self, ways: list[Way]):
         self.ways = ways
@@ -153,6 +154,14 @@ class Line:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+@dataclass
+class Trip:
+    origin_stop: Stop
+    destination_stop: Stop
+    origin_time: str
+    destination_time: str
+    way: Way
 
 def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
     """Cache the request in a file with the same name as the url"""
@@ -238,7 +247,9 @@ def get_line_routes(line: Line) -> list[Route]:
         route_name = route['name']
         route_origin = route['origin']
         route_destination = route['destination']
-        routes.append(Route(route_id, route_name, route_destination, route_origin))
+        new_route = Route(route_id, route_name, route_destination, route_origin)
+        new_route._line = line
+        routes.append(new_route)
 
         if first_route:
             route_ways = []

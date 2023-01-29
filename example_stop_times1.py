@@ -31,6 +31,7 @@ if __name__ == "__main__":
     # get all unique stops from lines (shared stops are not duplicated)
     # there is usually one stop per way, which share the same name, but
     # have different ids
+    # if provided with None, all stops are returned
     stops = cmpy.get_stops_from_lines(None)
 
     # get stops containing the match string
@@ -38,14 +39,6 @@ if __name__ == "__main__":
     # the results
     stops_carapinheira = cmpy.get_stops_containing('R Dom João V 51', stops)
     stops_lisboa = cmpy.get_stops_containing('Campo Grande', stops)
-
-    # get ways (associated with a route) which have an origin stop before a
-    # destination stop
-    # this isn't used in this example, but may be useful for other purposes
-    ways1 = cmpy.get_ways_with_origin_before_destination(
-        stops_carapinheira, stops_lisboa, lines)
-    ways2 = cmpy.get_ways_with_origin_before_destination(
-        stops_lisboa, stops_carapinheira, lines)
 
     # day for which to get the time table
     # format: YYYY-MM-DD

@@ -9,3 +9,12 @@ The largest benefit of this API is the ability to get the next bus times for a g
 
 - [Requests](https://pypi.org/project/requests/): HTTP requests
 
+# Flask web app
+
+This project also includes a Flask web app that uses the API. It is a simple web app that allows you to search for a bus stop and see the next bus times for all bus lines that pass through it going to some destination.
+
+Under [horarios.pedrotaborda.me](http://horarios.pedrotaborda.me/), you can find a hosted version of the web app. 
+
+## Dependencies
+
+- [Flask](https://pypi.org/project/Flask/): Web framework

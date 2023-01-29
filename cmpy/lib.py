@@ -118,7 +118,11 @@ def get_ways_with_origin_before_destination(origins: list[api.Stop], destination
         for route in line.routes:
             for way in route.ways:
                 for origin in origins:
+                    if not way.contains_stop(origin):
+                        continue
                     for destination in destinations:
+                        if not way.contains_stop(destination):
+                            continue
                         if way.in_sequence(origin, destination):
                             ways.append(way)
     return ways
@@ -133,9 +137,15 @@ def get_trips(origins: list[api.Stop], destinations: list[api.Stop], lines: list
         for route in line.routes:
             for way in route.ways:
                 for origin in origins:
+                    if not way.contains_stop(origin):
+                        continue
                     for destination in destinations:
+                        if not way.contains_stop(destination):
+                            continue
                         if way.in_sequence(origin, destination):
                             time_table = api.get_route_time_table(way._route, way, day)
+                            origin_times = []
+                            destination_times = []
                             # get times for origin and destination stops
                             for stop_time in time_table:
                                 if stop_time.stop == origin:

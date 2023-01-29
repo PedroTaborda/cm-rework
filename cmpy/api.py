@@ -2,6 +2,7 @@ import requests
 import urllib
 import os
 import pickle
+import datetime
 from dataclasses import dataclass, field
 
 DAY_FOR_STATIC_DATA = "2023-06-06"
@@ -48,30 +49,43 @@ class Way:
     _has_stops: bool = field(init=False, default=False)
     _has_timetable: bool = field(init=False, default=False)
     _route: "Route" = field(init=False, default=None)
+    _stops_dict: dict[str, list[Stop]] = field(init=False, default_factory=dict)
 
     def in_sequence(self, stop1: Stop, stop2: Stop) -> bool:
         """Returns True if stop1 is before stop2 in the way.
         """
-        # find the stops in the way
-        stop1_in_way = None
-        stop2_in_way = None
-        for stop in self.stops:
-            if stop == stop1:
-                stop1_in_way = stop
-            if stop == stop2:
-                stop2_in_way = stop
-            if stop1_in_way is not None and stop2_in_way is not None:
-                break
-        if stop1_in_way is not None and stop2_in_way is not None:
-            return stop1_in_way.sequence < stop2_in_way.sequence
-        else:
-            return False
+        if not self._has_stops:
+            self.populate_stops()
+        stop1_options = self._stops_dict.get(stop1.name, [])
+        stop2_options = self._stops_dict.get(stop2.name, [])
 
+        if len(stop1_options) == 0 or len(stop2_options) == 0:
+            return False
+        
+        for stop1_option in stop1_options:
+            for stop2_option in stop2_options:
+                if stop1_option.sequence < stop2_option.sequence:
+                    return True
+
+    def contains_stop(self, stop: Stop) -> bool:
+        if not self._has_stops:
+            self.populate_stops()
+        stop_options = self._stops_dict.get(stop.name, [])
+        if len(stop_options) == 0:
+            return False
+        for stop_option in stop_options:
+            if stop_option.sequence == stop.sequence:
+                return True
+        return False
+        
     def set_stops(self, stops: list[Stop]):
         self.stops = stops
         self._has_stops = True
         for stop in stops:
             stop._way = self
+            if stop.name not in self._stops_dict:
+                self._stops_dict[stop.name] = []
+            self._stops_dict[stop.name].append(stop)
     
     def add_timetable(self, day: str, stop_times: StopTimes):
         self.timetable[day] = stop_times
@@ -164,7 +178,7 @@ class Trip:
     destination_time: str
     way: Way
 
-def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
+def __cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
     """Cache the request in a file with the same name as the url"""
     if not os.path.isdir(cache_dir):
         os.mkdir(cache_dir)
@@ -183,6 +197,20 @@ def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
 
     return response
 
+cache_dict = {}
+def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
+    """Uses __cached_request, but places the response in a more accessible dict
+    """
+    # not right now
+    return __cached_request(url, params, cache_dir)
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
+    filename = urllib.parse.urlencode(params) + ".pkl"
+    filename = os.path.join(cache_dir, filename)
+    if filename not in cache_dict:
+        cache_dict[filename] = __cached_request(url, params, cache_dir)
+    return cache_dict[filename]
+
 def _delete_cached_request(url: str, params: dict[str, str], cache_dir="cache"):
     """Delete the cached request"""
     if not os.path.isdir(cache_dir):
@@ -193,6 +221,17 @@ def _delete_cached_request(url: str, params: dict[str, str], cache_dir="cache"):
         os.remove(filename)
     except FileNotFoundError:
         pass
+
+def _delete_older_than(days: int, cache_dir="cache"):
+    """Delete all cached requests older than days"""
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
+    for filename in os.listdir(cache_dir):
+        if filename.endswith(".pkl"):
+            filepath = os.path.join(cache_dir, filename)
+            file_age = (datetime.datetime.now() - datetime.datetime.fromtimestamp(os.path.getmtime(filepath))).days
+            if file_age > days:
+                os.remove(filepath)
 
 def get_all_lines() -> list[Line]:
     url = "https://horarios.carrismetropolitana.pt"

@@ -54,7 +54,7 @@
             </thead>
             <tbody class="trips">
                 {% for trip in trips %}
-                <tr>
+                <tr id = "{{ loop.index }}" class="trip">
                     <td class="departure">{{ trip.t0 }}</td>
                     <td class="arrival">{{ trip.tf }}</td>
                     <td class="line">{{ trip.lineId }}</td>
@@ -63,6 +63,73 @@
                 </tr>
                 {% endfor %}
             </tbody>
+            <script>   
+                var table = document.querySelector(".timetable");
+                var rows = table.querySelectorAll(".trip");
+                var fields = table.querySelector(".fields");
+                var departure = fields.querySelector(".departure");
+                var arrival = fields.querySelector(".arrival");
+                var line = fields.querySelector(".line");
+                var route = fields.querySelector(".route");
+                var way = fields.querySelector(".way");
+
+                var lastSorted = 0;
+                var dir = "asc";
+
+                function sortTable(n) {
+                    var switching = true;
+                    if (n == lastSorted) {
+                        dir = dir == "asc" ? "desc" : "asc";
+                    } else {
+                        lastSorted = n;
+                        dir = "asc";
+                    }
+                    while (switching) {
+                        switching = false;
+                        var rows = table.querySelectorAll(".trip");
+                        for (var i = 0; i < (rows.length - 1); i++) {
+                            var shouldSwitch = false;
+                            var x = rows[i].querySelectorAll("td")[n];
+                            var y = rows[i + 1].querySelectorAll("td")[n];
+                            if (dir == "asc") {
+                                if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                                    shouldSwitch = true;
+                                    break;
+                                }
+                            } else if (dir == "desc") {
+                                if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                                    shouldSwitch = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (shouldSwitch) {
+                            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                            switching = true;
+                        }
+                    }
+                }
+
+                departure.addEventListener("click", function() {
+                    sortTable(0);
+                });
+
+                arrival.addEventListener("click", function() {
+                    sortTable(1);
+                });
+
+                line.addEventListener("click", function() {
+                    sortTable(2);
+                });
+
+                route.addEventListener("click", function() {
+                    sortTable(3);
+                });
+
+                way.addEventListener("click", function() {
+                    sortTable(4);
+                });
+            </script>
             <style>
                 .timetable {
                     border-collapse: collapse;
@@ -97,6 +164,7 @@
                     text-align: left;
                     background-color: #000000;
                     color: #ffdc04;
+                    cursor: pointer;
                 }
             </style>
             {#

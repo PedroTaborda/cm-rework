@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import cmpy
+import datetime
 
-
+log_file = 'usr-log.txt'
 
 app = Flask(__name__)
 
@@ -41,9 +42,7 @@ def get_timetable():
     date = request.args.get('date')
     raw = request.args.get('raw')
 
-
-    print(f"origin: {originId}, destination: {destinationId}, date: {date}, raw: {raw}")
-
+    # print(f"origin: {originId}, destination: {destinationId}, date: {date}, raw: {raw}")
     origin = cmpy.get_stops_containing([originId], stops, type='id')[0]
     destination = cmpy.get_stops_containing(
         [destinationId], stops, type='id')[0]
@@ -101,6 +100,17 @@ def static_files(path, ext):
 def get_stops():
     return sendable_stops
 
+
+@app.after_request
+def log_user_ip(response: Flask.response_class):
+    ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+    datetime_seconds = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not request.args:
+        request.args = ""
+    with open(log_file, 'a') as f:
+        f.write(
+            f"{datetime_seconds} - {ip} - \"{request.method} {request.path} {request.args}\" {response.status_code}\n")
+    return response
 
 if __name__ == '__main__':
     # run on port 1722 on 0.0.0.0

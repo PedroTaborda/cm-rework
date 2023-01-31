@@ -5,7 +5,7 @@ import pickle
 import datetime
 from dataclasses import dataclass, field
 
-DAY_FOR_STATIC_DATA = "2023-06-06"
+DAYS_FOR_STATIC_DATA = ["2023-06-06", "2023-01-31"]
 
 @dataclass
 class Stop:
@@ -94,7 +94,12 @@ class Way:
     
     def populate_stops(self):
         if not self._has_stops:
-            stops = get_route_stops(self._route, self, DAY_FOR_STATIC_DATA)
+            for day in DAYS_FOR_STATIC_DATA:
+                stops = get_route_stops(self._route, self, day)
+                if stops:
+                    break
+            if not stops:
+                print(f"Could not get stops for {self._route.name} ({self._route.id}) - {self.name} ({self.id})")
             self.set_stops(stops)
     
     def populate_timetable(self, route, day):

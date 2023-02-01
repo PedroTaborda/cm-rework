@@ -13,34 +13,83 @@
 </head>
 
 <body>
+<div class="top-bar">
     <div id="back-btn">
         <span><a href="/">Voltar</a></span>
     </div>
+    {# <h2 class="order">{{ origin.name }} - {{ destination.name }}</h2> #}
+    <h2 class="order">
+    <a href="/timetable?origin={{ destination.id }}&destination={{ origin.id }}&date={{ date }}">{{ origin.name }} - {{ destination.name }} [{{ date }}]
+    <div class="lr-arrows">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left-right"
+        viewBox="0 0 16 16">
+        <path fill-rule="evenodd"
+            d="M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5zm14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5z" stroke="currentColor" strokeWidth="2" />
+    </svg>
+    </div>
+    </a>
+    </h2>
+</div>
     <style>
-        #back-btn {
+    /* svg elements inside lr-arrows are stacked on top of one another */
+    .lr-arrows {
+        position: relative;
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        margin-left: 5px;
+    }
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content:left;
             padding: 10px;
-            color: #ffdc04;
-            background-color: #000000;
+            margin: 0 auto;
+            width: 100%;
+        }
+        #back-btn {
+            color: #ffdd01;
             font-family: poppins, sans-serif;
             font-size: 20px;
             text-align: center;
             display: inline;
+            padding: 10px;
         }
 
         #back-btn a {
-            color: #ffdc04;
+            color: #ffdd01;
             text-decoration: none;
+            padding: 10px;
+            margin: 0 auto;
+            background-color: #000000;
+
         }
 
         #back-btn a:hover {
-            color: #ffdc04;
+            color: #ffdd01;
             text-decoration: none;
+            background-color: #555;
+        }
+        .order {
+            font-family: poppins, sans-serif;
+            font-size: 20px;
+            text-align: center;
+        }
+
+        .order a {
+            color: #ffdd01;
+            text-decoration: none;
+            padding: 10px;
+            margin: 0 auto;
+            background-color: #000000;
+        }
+
+        .order a:hover {
+            color: #ffdd01;
+            text-decoration: none;
+            background-color: #555;
         }
     </style>
-    <h1>A Mostrar Horário</h1>
-    <h2>Da paragem: {{ origin.name }} ({{origin.id}})</h1>
-    <h2>Para a paragem: {{ destination.name }} ({{destination.id}})</h1>
-
     <div id="time">
         <table class="timetable">
             <thead class="fields">
@@ -163,7 +212,7 @@
                     padding-bottom: 12px;
                     text-align: left;
                     background-color: #000000;
-                    color: #ffdc04;
+                    color: #ffdd01;
                     cursor: pointer;
                 }
             </style>

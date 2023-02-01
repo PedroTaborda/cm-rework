@@ -82,13 +82,14 @@ def get_timetable():
             'lon': destination.lon,
             'location-identifiers': destination.location_identifiers,
         },
+        'date': date,
         'trips': sendable_trips
     }
 
     if raw is not None:
         return raw_trips.__str__()
     
-    return render_template('timetable.html', origin=origin, destination=destination, trips=sendable_trips)
+    return render_template('timetable.html', origin=origin, destination=destination, trips=sendable_trips, date=date)
 
 # for css, javascript, images, etc.
 @app.route('/<path:path>.<ext>')

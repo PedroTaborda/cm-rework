@@ -148,6 +148,8 @@ def get_trips(origins: list[api.Stop], destinations: list[api.Stop], lines: list
                             destination_times = []
                             # get times for origin and destination stops
                             for stop_time in time_table:
+                                if not isinstance(stop_time, api.StopTimes):
+                                    continue
                                 if stop_time.stop == origin:
                                     origin_times = stop_time.times
                                 if stop_time.stop == destination:

@@ -115,4 +115,4 @@ def log_user_ip(response: Flask.response_class):
 
 if __name__ == '__main__':
     # run on port 1722 on 0.0.0.0
-    app.run(host="0.0.0.0", port=1722, debug=True)
+    app.run(host="0.0.0.0", port=1722, debug=False)

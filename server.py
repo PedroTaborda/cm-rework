@@ -97,8 +97,10 @@ def static_files(path, ext):
     return app.send_static_file(path + '.' + ext)
 
 # list with all stops
-@app.route('/stops')
+@app.route('/stops', methods=['GET', 'OPTIONS'])
 def get_stops():
+    if request.method == 'OPTIONS':
+        return ""
     return sendable_stops
 
 

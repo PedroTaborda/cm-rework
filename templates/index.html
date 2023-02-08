@@ -201,7 +201,7 @@
                     $.ajax({
                         url: "/stops",
                         type: "GET",
-                        dataType: "json",
+                        dataType: "text",
                         success: function (data) {
                             stops = data;
                             autocomplete(document.getElementById("search-origin"), true);

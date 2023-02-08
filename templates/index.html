@@ -203,7 +203,7 @@
                         type: "GET",
                         dataType: "text",
                         success: function (data) {
-                            stops = data;
+                            stops = JSON.parse(data);
                             autocomplete(document.getElementById("search-origin"), true);
                             autocomplete(document.getElementById("search-destination"), false);
 

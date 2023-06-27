@@ -51,11 +51,10 @@ class Route:
     stops: dict[str, Stop] = field(init=False, default_factory=dict)
     trips: list["Trip"] = field(init=False, default_factory=list)
 
-    def __getattribute__(self, __name: str):
-        if __name == "stops" and not self._has_stops_and_trips:
-            self._has_stops_and_trips = True
-            self.trips = get_route_stops_and_trips(self)
-        return super().__getattribute__(__name)
+    # post init
+    def __post_init__(self):
+        self._has_stops_and_trips = True
+        self.trips = get_route_stops_and_trips(self)
 
     def has_stop(self, stop: Union[Stop, str]) -> bool:
         if isinstance(stop, Stop):

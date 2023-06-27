@@ -62,7 +62,7 @@ def get_timetable():
             {
                 't0': trip.origin_time,
                 'tf': trip.destination_time,
-                'lineId': trip.route.id,
+                'lineId': trip.route.short_name,
                 'route' : trip.route.long_name,
                 'way': trip.trip.direction,
             }

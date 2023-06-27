@@ -5,6 +5,9 @@ import os
 import pickle
 import datetime
 from dataclasses import dataclass, field
+import msgspec
+
+json_decoder = msgspec.json.Decoder()
 
 DAYS_FOR_STATIC_DATA = ["2023-06-06", "2023-01-31"]
 
@@ -238,7 +241,8 @@ def get_all_routes() -> list[Route]:
 
     # convert the response to a list of routes
     routes = []
-    for route in response.json():
+    # use msgspec to decode the json
+    for route in json_decoder.decode(response.text):
         route_id = route['route_id']
         route_short_name = route['route_short_name']
         route_long_name = route['route_long_name']
@@ -297,7 +301,7 @@ def get_route_stops_and_trips(route: Route) -> list[Trip]:
     #       "stop_name":"Av Força Aérea Port (Passagem Peões)",
     # ...
     trips = []
-    for direction in response.json()[0]['directions']:
+    for direction in json_decoder.decode(response.text)[0]['directions']:
         for trip in direction['trips']:
             trip_id = trip['trip_id']
             service_id = trip['service_id']
@@ -329,7 +333,7 @@ def start_cache_renewal_worker(period_seconds: int=120):
             print("Connection error")
             return []
         route_short_names = []
-        for route in response.json():
+        for route in json_decoder.decode(response.text):
             route_short_name = route['route_short_name']
             route_short_names.append(route_short_name)
         

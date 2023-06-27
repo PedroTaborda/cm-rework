@@ -1,6 +1,10 @@
 import cmpy
+import tracemalloc
+
+
 
 if __name__ == "__main__":
+    # tracemalloc.start()
     route_ids_carapinheira = [
         "2106",
         "2110",
@@ -23,16 +27,20 @@ if __name__ == "__main__":
     # get all lines
     routes = cmpy.get_all_routes()
 
+    
+    # snapshot1 = tracemalloc.take_snapshot()
+
     # prior knowledge of line ids may be used to reduce the number of lines to
     # be matched (optional)
-    routes = cmpy.match_routes_containing(
-        route_ids_carapinheira, routes, type='id')
+    #routes = cmpy.match_routes_containing(
+    #    route_ids_carapinheira, routes, type='id')
 
     # get all unique stops from lines (shared stops are not duplicated)
     # there is usually one stop per way, which share the same name, but
     # have different ids
     # if provided with None, all stops are returned
     stops = cmpy.get_stops_from_routes(None)
+    # snapshot2 = tracemalloc.take_snapshot()
 
     # get stops containing the match string
     # this may return many stops, so the user may need to further filter
@@ -51,6 +59,7 @@ if __name__ == "__main__":
     trips_l_c = cmpy.get_trips(
         stops_lisboa, stops_carapinheira, routes, day=day)
 
+    # snapshot3 = tracemalloc.take_snapshot()
     with open("carapinheira_lisboa.txt", "w", encoding='utf8') as f:
         f.write(f"Carapinheira -> Lisboa ({day}):\n")
         print(f"Carapinheira -> Lisboa ({day}):")
@@ -68,4 +77,10 @@ if __name__ == "__main__":
                 f"{tripAB.origin_time} -> {tripAB.destination_time}: {tripAB.trip.direction} - {tripAB.route.long_name} ({tripAB.route.id})\n")
             print(
                 f"{tripAB.origin_time} -> {tripAB.destination_time}: {tripAB.trip.direction} - {tripAB.route.long_name} ({tripAB.route.id})")
-            
+
+    # for stat in snapshot2.compare_to(snapshot1, 'lineno'):
+    #     print(stat)
+    # for stat in snapshot3.compare_to(snapshot2, 'lineno'):
+    #     print(stat)  
+
+    # tracemalloc.stop()          

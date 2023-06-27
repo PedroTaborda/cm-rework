@@ -1,3 +1,4 @@
+from typing import Union
 import requests
 import urllib
 import os
@@ -13,18 +14,17 @@ class Stop:
     name: str
     lat: float
     lon: float
-    sequence: int  # order in the route
     location_identifiers: list[str] = field(init=False, default_factory=list)
-    _way: "Way" = field(init=False, default=None)
+    _route: "Route" = field(init=False, default=None)
 
     def __eq__(self, o: object) -> bool:
         if isinstance(o, Stop):
-            return self.id == o.id and self.sequence == o.sequence
+            return self.id == o.id
         return False
 
     def __str__(self) -> str:
-        if self._way is not None:
-            return f"({self.id}) {self.name} [{self.sequence} in {self._way.name}]"
+        if self._route is not None:
+            return f"({self.id}) {self.name} [in {self._route.long_name}]"
         
         return f"{self.name} ({self.id})"
     
@@ -41,161 +41,92 @@ class RouteStops:
     stops: list[Stop]
 
 @dataclass
-class Way:
-    id: str
-    name: str
-    stops: list[Stop] = field(init=False, default_factory=list)
-    timetable: dict[str, StopTimes] = field(init=False, default_factory=dict)  # key is the day
-    _has_stops: bool = field(init=False, default=False)
-    _has_timetable: bool = field(init=False, default=False)
-    _route: "Route" = field(init=False, default=None)
-    _stops_dict: dict[str, list[Stop]] = field(init=False, default_factory=dict)
-
-    def in_sequence(self, stop1: Stop, stop2: Stop) -> bool:
-        """Returns True if stop1 is before stop2 in the way.
-        """
-        if not self._has_stops:
-            self.populate_stops()
-        stop1_options = self._stops_dict.get(stop1.name, [])
-        stop2_options = self._stops_dict.get(stop2.name, [])
-
-        if len(stop1_options) == 0 or len(stop2_options) == 0:
-            return False
-        
-        for stop1_option in stop1_options:
-            for stop2_option in stop2_options:
-                if stop1_option.sequence < stop2_option.sequence:
-                    return True
-
-    def contains_stop(self, stop: Stop) -> bool:
-        if not self._has_stops:
-            self.populate_stops()
-        stop_options = self._stops_dict.get(stop.name, [])
-        if len(stop_options) == 0:
-            return False
-        for stop_option in stop_options:
-            if stop_option.sequence == stop.sequence:
-                return True
-        return False
-        
-    def set_stops(self, stops: list[Stop]):
-        self.stops = stops
-        self._has_stops = True
-        for stop in stops:
-            stop._way = self
-            if stop.name not in self._stops_dict:
-                self._stops_dict[stop.name] = []
-            self._stops_dict[stop.name].append(stop)
-    
-    def add_timetable(self, day: str, stop_times: StopTimes):
-        self.timetable[day] = stop_times
-        if not self._has_timetable:
-            self._has_timetable = True
-    
-    def populate_stops(self):
-        if not self._has_stops:
-            for day in DAYS_FOR_STATIC_DATA:
-                stops = get_route_stops(self._route, self, day)
-                if stops:
-                    break
-            if not stops:
-                print(f"Could not get stops for {self._route.name} ({self._route.id}) - {self.name} ({self.id})")
-            self.set_stops(stops)
-    
-    def populate_timetable(self, route, day):
-        timetable = get_route_time_table(route, self, day)
-        self.add_timetable(day, timetable)
-    
-    def __getattribute__(self, __name: str):
-        if __name == "stops":
-            if not self._has_stops:
-                self.populate_stops()
-        return super().__getattribute__(__name)
-    
-    def __str__(self) -> str:
-        return f"{self.name} ({self.id})"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-@dataclass
 class Route:
     id: str
-    name: str
-    destination: str
-    origin: str
-    ways: list[Way] = field(init=False, default_factory=list)
-    _has_ways: bool = field(init=False, default=False)
-    _line: "Line" = field(init=False, default=None)
+    short_name: str
+    long_name: str
+    color: str
+    text_color: str
+    _has_stops_and_trips: bool = field(init=False, default=False)
+    stops: dict[str, Stop] = field(init=False, default_factory=dict)
+    trips: list["Trip"] = field(init=False, default_factory=list)
 
-    def set_ways(self, ways: list[Way]):
-        self.ways = ways
-        for way in ways:
-            way._route = self
-        self._has_ways = True
-
-    def populate_ways(self, day):
-        if not self._has_ways:
-            ways = get_route_ways(self)
-            self.set_ways(ways)
-    
     def __getattribute__(self, __name: str):
-        if __name == "ways":
-            if not self._has_ways:
-                self.populate_ways()
+        if __name == "stops" and not self._has_stops_and_trips:
+            self._has_stops_and_trips = True
+            self.trips = get_route_stops_and_trips(self)
         return super().__getattribute__(__name)
 
-    def __str__(self) -> str:
-        return f"{self.name} ({self.id})"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-            
-@dataclass
-class Line:
-    id: str
-    name: str
-    routes: list[Route] = field(init=False, default_factory=list)
-    _has_routes: bool = field(init=False, default=False)
-
-    def populate_routes(self):
-        if not self._has_routes:
-            self.routes = get_line_routes(self)
-            self._has_routes = True
+    def has_stop(self, stop: Union[Stop, str]) -> bool:
+        if isinstance(stop, Stop):
+            stop = stop.id
+        return stop in self.stops
     
-    def __getattribute__(self, __name: str):
-        if __name == "routes":
-            if not self._has_routes:
-                self.populate_routes()
-        return super().__getattribute__(__name)
+    def get_stop(self, stop_id) -> Stop:
+        return self.stops[stop_id]
+    
+    def add_stop(self, stop: Stop) -> None:
+        self.stops[stop.id] = stop
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.id})"
+        return f"{self.long_name} ({self.id})"
 
     def __repr__(self) -> str:
         return self.__str__()
 
 @dataclass
-class Trip:
+class TripAB:
     origin_stop: Stop
     destination_stop: Stop
     origin_time: str
     destination_time: str
-    way: Way
+    route: Route
+    trip: "Trip"
 
-def __cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
+@dataclass
+class TimedStop:
+    stop_id: str
+    stop_name: str
+    stop_sequence: int
+    arrival_time: str
+    departure_time: str
+@dataclass
+class Trip:
+    trip_id: str
+    service_id: str
+    schedule: dict[str, TimedStop] # for O(1) stop lookup
+    dates: list[str]
+    direction: str
+
+    def in_sequence(self, stopA: Union[Stop, str], stopB: Union[Stop, str]):
+        """Returns true if stopA is before stopB in the trip"""
+        if isinstance(stopA, Stop):
+            stopA = stopA.id
+        if isinstance(stopB, Stop):
+            stopB = stopB.id
+        if stopA not in self.schedule or stopB not in self.schedule:
+            return False
+        return self.schedule[stopA].stop_sequence < self.schedule[stopB].stop_sequence
+        
+
+
+def __cached_request(url: str, key: str, cache_dir="cache", overwrite=False) -> str:
     """Cache the request in a file with the same name as the url"""
     if not os.path.isdir(cache_dir):
         os.mkdir(cache_dir)
-    filename = urllib.parse.urlencode(params) + ".pkl"
+    filename = key + ".pkl"
     filename = os.path.join(cache_dir, filename)
     try:
+        if overwrite:
+            # delete file first, to ensure it's not corrupted
+            os.remove(filename)
+            raise FileNotFoundError
         with open(filename, "rb") as f:
             response = pickle.load(f)
     except FileNotFoundError:
-        response = requests.request("GET", url, params=params)
+        response = requests.request("GET", url)
         if not response.ok:
-            print(f"Error {response.status_code} for {params}")
+            print(f"Error {response.status_code} for {url}")
             raise requests.exceptions.ConnectionError
         with open(filename, "wb") as f:
             pickle.dump(response, f)
@@ -203,18 +134,18 @@ def __cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str
     return response
 
 cache_dict = {}
-def _cached_request(url: str, params: dict[str, str], cache_dir="cache") -> str:
+def _cached_request(url: str, key: str, cache_dir: os.PathLike="cache", overwrite=False) -> str:
     """Uses __cached_request, but places the response in a more accessible dict
     """
     # not right now
-    return __cached_request(url, params, cache_dir)
-    if not os.path.isdir(cache_dir):
-        os.mkdir(cache_dir)
-    filename = urllib.parse.urlencode(params) + ".pkl"
-    filename = os.path.join(cache_dir, filename)
-    if filename not in cache_dict:
-        cache_dict[filename] = __cached_request(url, params, cache_dir)
-    return cache_dict[filename]
+    return __cached_request(url, key, cache_dir, overwrite)
+    # if not os.path.isdir(cache_dir):
+    #     os.mkdir(cache_dir)
+    # filename = urllib.parse.urlencode(params) + ".pkl"
+    # filename = os.path.join(cache_dir, filename)
+    # if filename not in cache_dict:
+    #     cache_dict[filename] = __cached_request(url, params, cache_dir)
+    # return cache_dict[filename]
 
 def _delete_cached_request(url: str, params: dict[str, str], cache_dir="cache"):
     """Delete the cached request"""
@@ -238,180 +169,188 @@ def _delete_older_than(days: int, cache_dir="cache"):
             if file_age > days:
                 os.remove(filepath)
 
-def get_all_lines() -> list[Line]:
-    url = "https://horarios.carrismetropolitana.pt"
-    querystring = {
-        "action":"cmet_get_all_lines"
-    }
+def get_all_routes() -> list[Route]:
+    summary_url = "https://schedules.carrismetropolitana.pt/api/routes/summary"
     try:
-        response = _cached_request(url, params=querystring)
+        response = _cached_request(summary_url, "routes_summary", overwrite=False)
     except requests.exceptions.ConnectionError:
         print("Connection error")
         return []
 
     # example response.text:
     # '[
-    # {"id":"1001","line_id":"1001","line_name":"Alfragide (Estrada do Seminario) - Reboleira (Esta\\u00e7\\u00e3o)","text":"<span class=\\"line-number\\" style=\\"background-color: rgb(250,50,80);\\">1001<\\/span> <span class=\\"line-name\\">Alfragide (Estrada do Seminario) - Reboleira (Esta\\u00e7\\u00e3o)<\\/span>"},
-    # {"id":"1002","line_id":"1002","line_name":"Alfragide (Igreja) - Amadora (Esta\\u00e7\\u00e3o Norte)","text":"<span class=\\"line-number\\" style=\\"background-color: rgb(250,50,80);\\">1002<\\/span> <span class=\\"line-name\\">Alfragide (Igreja) - Amadora (Esta\\u00e7\\u00e3o Norte)<\\/span>"},
-    # {"id":"1003","line_id":"1003","line_name":"Amadora (Esta\\u00e7\\u00e3o Norte) - Amadora Este (Metro)","text":"<span class=\\"line-number\\" style=\\"background-color: rgb(250,50,80);\\">1003<\\/span> <span class=\\"line-name\\">Amadora (Esta\\u00e7\\u00e3o Norte) - Amadora Este (Metro)<\\/span>"}
+    # {
+    #     "_id": "6474e02e155a72200ee0dcf1",
+    #     "route_id": "4902_0",
+    #     "__v": 0,
+    #     "createdAt": "2023-05-29T17:26:06.621Z",
+    #     "municipalities": [
+    #         {
+    #             "id": "10",
+    #             "value": "Montijo",
+    #             "_id": "649aa998fc1045004438bdc0"
+    #         },
+    #         {
+    #             "id": "13",
+    #             "value": "Palmela",
+    #             "_id": "649aa998fc1045004438bdc1"
+    #         },
+    #         {
+    #             "id": "19",
+    #             "value": "CIM Alentejo Central",
+    #             "_id": "649aa998fc1045004438bdc2"
+    #         }
+    #     ],
+    #     "route_color": "#ED1944",
+    #     "route_long_name": "Landeira - Pegões",
+    #     "route_short_name": "4902",
+    #     "route_text_color": "#FFFFFF",
+    #     "updatedAt": "2023-06-27T09:19:22.084Z"
+    # },
+    # {
+    #     "_id": "6474e02e155a72200ee0da75",
+    #     "route_id": "4905_0",
+    #     "__v": 0,
+    #     "createdAt": "2023-05-29T17:26:06.251Z",
+    #     "municipalities": [
+    #         {
+    #             "id": "10",
+    #             "value": "Montijo",
+    #             "_id": "649aa997fc1045004438a68b"
+    #         },
+    #         {
+    #             "id": "13",
+    #             "value": "Palmela",
+    #             "_id": "649aa997fc1045004438a68c"
+    #         },
+    #         {
+    #             "id": "19",
+    #             "value": "CIM Alentejo Central",
+    #             "_id": "649aa997fc1045004438a68d"
+    #         }
+    #     ],
+    #     "route_color": "#BB3E96",
+    #     "route_long_name": "Faias - Vendas Novas",
+    #     "route_short_name": "4905",
+    #     "route_text_color": "#FFFFFF",
+    #     "updatedAt": "2023-06-27T09:19:22.199Z"
+    # },
     # ]'
 
-    # convert the response to a list of lines
-    lines = []
-    for line in response.json():
-        if line['line_id'] != line['id']:
-            print(f"line_id != id: {line['line_id']} != {line['id']}")
-        line_id = line['id']
-        line_name = line['line_name']
-        lines.append(Line(line_id, line_name))
-    
-    return lines
-
-def get_line_routes(line: Line) -> list[Route]:
-    url = "https://horarios.carrismetropolitana.pt"
-    querystring = {
-        "action": "cmet_get_line_routes",
-        "line_id": line.id
-    }
-    try:
-        response = _cached_request(url, params=querystring)
-    except requests.exceptions.ConnectionError:
-        print("Connection error")
-        return []
-
-    response_ways = response.json()['ways'] # only returns the ways for the first route
-    response_routes = response.json()['routes']
-
-    routes: list[Route] = []
-    first_route = True
-    for route in response_routes:
-        if line.id != route['line_id']:
-            print(f"line_id != id: {line.id} != {route['line_id']}")
-
+    # convert the response to a list of routes
+    routes = []
+    for route in response.json():
         route_id = route['route_id']
-        route_name = route['name']
-        route_origin = route['origin']
-        route_destination = route['destination']
-        new_route = Route(route_id, route_name, route_destination, route_origin)
-        new_route._line = line
-        routes.append(new_route)
-
-        if first_route:
-            route_ways = []
-            for way in response_ways:
-                way_id = way['id']
-                way_name = way['nome']
-                route_ways.append(Way(way_id, way_name))
-            routes[0].set_ways(route_ways)
-            first_route = False
-        else:
-            ways = get_route_ways(routes[-1])
-            routes[-1].set_ways(ways)
-
+        route_short_name = route['route_short_name']
+        route_long_name = route['route_long_name']
+        route_color = route['route_color']
+        route_text_color = route['route_text_color']
+        routes.append(Route(route_id, route_short_name, route_long_name, route_color, route_text_color))
+    
     return routes
 
-def get_route_ways(route: Route) -> list[Way]:
-    if route._has_ways:
-        return route.ways
-    
-    url = "https://horarios.carrismetropolitana.pt"
-    querystring = {
-        "action": "cmet_get_route_ways",
-        "route_id": route.id
-    }
+def get_route_stops_and_trips(route: Route) -> list[Trip]:
+    url = f"https://schedules.carrismetropolitana.pt/api/routes/route_short_name/{route.short_name}"
     try:
-        response = _cached_request(url, params=querystring)
+        response = _cached_request(url, route.short_name)
     except requests.exceptions.ConnectionError:
         print("Connection error")
         return []
-
-    ways = []
-    for way in response.json():
-        way_id = way['id']
-        way_name = way['nome']
-        ways.append(Way(way_id, way_name))
-
-    return ways
-
-
-def get_route_stops(route: Route, way: Way, start_date: str) -> list[Stop]:
-    """Returns a list of stops for a specific way in a route.
-    start_date is a string in the format "YYYY-MM-DD" and is used to get the stops for a specific day.
-    """
-    url = "https://horarios.carrismetropolitana.pt"
-    querystring = {
-        "action": "cmet_get_route_stops",
-        "route_id": route.id,
-        "way_id": way.id,
-        "start_date": start_date
-    }
-    try:
-        response = _cached_request(url, params=querystring)
-    except requests.exceptions.ConnectionError:
-        print("Connection error")
-        return []
-    response_stops = response.json()['stops']
-    response_hours = response.json()['hours']
-    stops = []
-    for stop in response_stops:
-        stop_id = stop['stop_id']
-        stop_name = stop['stop_name']
-        stop_lat = stop['stop_lat']
-        stop_lon = stop['stop_lon']
-        stop_sequence = int(stop['stop_sequence'])
-        new_stop = Stop(stop_id, stop_name, stop_lat, stop_lon, stop_sequence)
-        new_stop._way = way
-        if new_stop not in stops:
-            stops.append(new_stop)
-    return stops
-
-def get_route_time_table(route: Route, way: Way, start_date: str) -> list[StopTimes]:
-    url = "https://horarios.carrismetropolitana.pt"
-    querystring = {
-        "action": "cmet_get_route_timetable",
-        "route_id": route.id,
-        "way_id": way.id,
-        "start_date": start_date
-    }
-    try:
-        # get url-encoded string with the query parameters
-        response = _cached_request(url, params=querystring)
-    except requests.exceptions.ConnectionError:
-        print("Error getting route time table")
-        return []
-    time_table_response = response.json()['timetable']
-
-    if len(time_table_response) == 0:
-        # no times for this route in this day
-        return []
-
-    if len(time_table_response) != len(way.stops):
-        print(f"route: {route.name} - way: {way.name}")
-        print(f"time_table_response and way.stops have different lengths ({len(time_table_response)} != {len(way.stops)})")
-
-    time_table = [None]*max([len(time_table_response), len(way.stops)])
-
-    # sometimes the response is a dict and sometimes it's a list
-    if isinstance(time_table_response, dict):
-        time_table_response = [val for val in time_table_response.values()]
     
-    for stop_sequence, stop in enumerate(time_table_response):
-        # stop is a dict with {stopId: {hour: [minutes] } }
-        # the dict has only one stopId which is the id of the stop
-        stop_id = list(stop.keys())[0]
-        stop = stop[stop_id]
-        times = []
+    # example response.text:
+    # '[
+    # {
+    # "trip_id":"p0_1002_0_1_0730_0759_0_7",
+    # "service_id":"p0_7",
+    # "dates":
+    # [
+    #    "20230703","20230704","20230705","20230706","20230707","20230710","20230711","20230712","20230713","20230714","20230717","20230718","20230719","20230720","20230721","20230724","20230725","20230726","20230727","20230728","20230731","20230801","20230802","20230803","20230804","20230807","20230808","20230809","20230810","20230811","20230814","20230815","20230816","20230817","20230818","20230821","20230822","20230823","20230824","20230825","20230828","20230829","20230830","20230831"
+    # ],
+    # "schedule":
+    # [
+    #   {
+    #       "stop_sequence":"1",
+    #       "stop_id":"030064",
+    #       "stop_name":"Alfragide (Força Aérea)",
+    #       "stop_lon":"-9.218330",
+    #       "stop_lat":"38.740175",
+    #       "arrival_time":"07:46:00",
+    #       "arrival_time_operation":"07:46:00",
+    #       "departure_time":"07:46:00",
+    #       "departure_time_operation":"07:46:00",
+    #       "_id":"649aa720fc10450044c498d1"
+    #   },
+    #   {
+    #       "stop_sequence":"2",
+    #       "stop_id":"030752",
+    #       "stop_name":"Av F Aerea Portuguesa (Força Aerea)",
+    #       "stop_lon":"-9.215718",
+    #       "stop_lat":"38.739757",
+    #       "arrival_time":"07:46:00",
+    #       "arrival_time_operation":"07:46:00",
+    #       "departure_time":"07:46:00",
+    #       "departure_time_operation":"07:46:00",
+    #       "_id":"649aa720fc10450044c498d2"
+    #   },
+    #   {
+    #       "stop_sequence":"3",
+    #       "stop_id":"030063",
+    #       "stop_name":"Av Força Aérea Port (Passagem Peões)",
+    # ...
+    trips = []
+    for direction in response.json()[0]['directions']:
+        for trip in direction['trips']:
+            trip_id = trip['trip_id']
+            service_id = trip['service_id']
+            dates = trip['dates']
+            direction_str = direction['headsign']
+            schedule = {}
+            for stop in trip['schedule']:
+                if not route.has_stop(stop['stop_id']):
+                    route.add_stop(Stop(stop['stop_id'], stop['stop_name'], stop['stop_lat'], stop['stop_lon']))
+                stop_id = stop['stop_id']
+                stop_name = stop['stop_name']
+                stop_sequence = stop['stop_sequence']
+                arrival_time = stop['arrival_time']
+                departure_time = stop['departure_time']
+                timedStop = TimedStop(stop_id, stop_name, stop_sequence, arrival_time, departure_time)
+                schedule[stop_id] = timedStop
+            trips.append(Trip(trip_id, service_id, schedule, dates, direction_str))
 
-        for idx, hour in enumerate(stop):
-            for minute in stop[hour]:
-                hour = int(hour)
-                minute = int(minute)
-                times.append(f"{hour:02d}:{minute:02d}")
-        
+    return trips
+
+def start_cache_renewal_worker(period_seconds: int=120):
+    import threading
+    import time
+    def worker():
+        summary_url = "https://schedules.carrismetropolitana.pt/api/routes/summary"
         try:
-            time_table[int(stop_sequence)] = StopTimes(way.stops[int(stop_sequence)], times)
-        except IndexError as e:
-            print(f"Tried to access stop_sequence {stop_sequence} in way.stops with length {len(way.stops)}")
-            raise e
-    return time_table
+            response = _cached_request(summary_url, "routes_summary", overwrite=False)
+        except requests.exceptions.ConnectionError:
+            print("Connection error")
+            return []
+        route_short_names = []
+        for route in response.json():
+            route_short_name = route['route_short_name']
+            route_short_names.append(route_short_name)
+        
+        i = 0
+        while True:
+            route_short_name = route_short_names[i%len(route_short_names)]
+            url = f"https://schedules.carrismetropolitana.pt/api/routes/route_short_name/{route_short_name}"
+            try:
+                response = _cached_request(url, route_short_name, overwrite=True)
+            except requests.exceptions.ConnectionError:
+                print(f"Connection error for route {route_short_name}")
+            if i % 1000 == 0:
+                try:
+                    response = _cached_request(summary_url, "routes_summary", overwrite=True)
+                except requests.exceptions.ConnectionError:
+                    print("Connection error for summary")
+            i += 1
+            time.sleep(period_seconds)
 
+    renewer = threading.Thread(target=worker, daemon=True)
+    renewer.start()
+
+    return renewer

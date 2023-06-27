@@ -16,8 +16,8 @@ if __name__ == "__main__":
     # get ways (associated with a route) which have an origin stop before a
     # destination stop
     # this isn't used in this example, but may be useful for other purposes
-    ways1 = cmpy.get_ways_with_origin_before_destination(stops_b_sousas, stops_lisboa, lines)
-    ways2 = cmpy.get_ways_with_origin_before_destination(stops_lisboa, stops_b_sousas, lines)
+    ways1 = cmpy.get_routes_with_origin_before_destination(stops_b_sousas, stops_lisboa, lines)
+    ways2 = cmpy.get_routes_with_origin_before_destination(stops_lisboa, stops_b_sousas, lines)
 
     # day for which to get the time table
     # format: YYYY-MM-DD

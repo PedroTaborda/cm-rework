@@ -6,7 +6,7 @@ log_file = 'usr-log.txt'
 
 app = Flask(__name__)
 
-lines = cmpy.get_all_lines()
+routes = cmpy.get_all_routes()
 stops = cmpy.get_all_stops()
 sendable_stops = []
 for stop in stops:
@@ -24,17 +24,18 @@ for stop in stops:
             'location-identifiers': "",
         })
 
+renewer = cmpy.start_cache_renewal_worker()
+
 # sort alphabetically
 sendable_stops.sort(key=lambda x: x['name'])
-
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-
 @app.route('/timetable', methods=['GET'])
 def get_timetable():
+    print(request.args)
     # get origin and destination
     originId = request.args.get('origin')
     destinationId = request.args.get('destination')
@@ -52,7 +53,7 @@ def get_timetable():
 
     # get time table from origin to destination
     trips = cmpy.get_trips(
-        origins, destinations, lines, date)
+        origins, destinations, routes, date.replace('-', ''))
 
     # convert to sendable format
     sendable_trips = []
@@ -61,9 +62,9 @@ def get_timetable():
             {
                 't0': trip.origin_time,
                 'tf': trip.destination_time,
-                'way': trip.way.name,
-                'route' : trip.way._route.name,
-                'lineId': trip.way._route._line.id
+                'lineId': trip.route.id,
+                'route' : trip.route.long_name,
+                'way': trip.trip.direction,
             }
         )
 

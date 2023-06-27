@@ -4,54 +4,57 @@ import pickle
 import os
 
 
-def match_lines_containing(matches: Union[str, list[str]], lines_to_match: list[api.Line], type='name') -> list[api.Line]:
+def match_routes_containing(matches: Union[str, list[str]], routes_to_match: list[api.Route], type='name') -> list[api.Route]:
     """Returns a list of lines whose name contains the match string or any of
     the match strings in the list.
     """
-    matched_lines = []
-    for line in lines_to_match:
+    matched_routes = []
+    for route in routes_to_match:
         if type == 'id':
-            matcher = [line.id]
+            matcher = [route.id]
         elif type == 'name':
-            matcher = [line.name]
+            matcher = [route.long_name]
         else:
             raise ValueError("Invalid type. Must be 'id' or 'name'")
 
         try:
             for match in matches:
                 if match in matcher:
-                    matched_lines.append(line)
+                    matched_routes.append(route)
+                else:
+                    # check if the matches are the begginings of the route name
+                    for name in matcher:
+                        if name.startswith(match):
+                            matched_routes.append(route)
         except TypeError:  # not an iterable
             if match in matcher:
-                matched_lines.append(line)
+                matched_routes.append(route)
 
-    return matched_lines
+    return matched_routes
 
-def get_lines_with_stops_containing(matches: Union[str, list[str]], lines_to_match: list[api.Line], type='name') -> list[api.Line]:
+def get_routes_with_stops_containing(matches: Union[str, list[str]], routes_to_match: list[api.Route], type='name') -> list[api.Route]:
     """Returns a list of lines which have a route containing at least one stop
     whose name contains the match string.
     """
-    matched_lines = []
-    for line in lines_to_match:
-        for route in line.routes:
-            for way in route.ways:
-                for stop in way.stops:
-                    if type == 'id':
-                        matcher = stop.id
-                    elif type == 'name':
-                        matcher = stop.name
-                    else:
-                        raise ValueError("Invalid type. Must be 'id' or 'name'")
-                    try:
-                        if isinstance(matches, str):
-                            matches = [matches]
-                        for match in matches:
-                            if match in matcher:
-                                matched_lines.append(line)
-                    except TypeError:  # not an iterable
-                        if match in matcher:
-                            matched_lines.append(line)
-    return matched_lines
+    matched_routes = []
+    for route in routes_to_match:
+        for stop in route.stops.values():
+            if type == 'id':
+                matcher = stop.id
+            elif type == 'name':
+                matcher = stop.name
+            else:
+                raise ValueError("Invalid type. Must be 'id' or 'name'")
+            try:
+                if isinstance(matches, str):
+                    matches = [matches]
+                for match in matches:
+                    if match in matcher:
+                        matched_routes.append(route)
+            except TypeError:  # not an iterable
+                if match in matcher:
+                    matched_routes.append(route)
+    return matched_routes
 
 def get_stops_containing(matches: Union[str, list[str]], stops_to_match: list[api.Stop], type='name') -> list[api.Stop]:
     """Returns a list of stops whose name contains the match string.
@@ -75,18 +78,16 @@ def get_stops_containing(matches: Union[str, list[str]], stops_to_match: list[ap
                 matched_stops.append(stop)
     return matched_stops
 
-def get_stops_from_lines(lines: Union[list[api.Line], None]) -> list[api.Stop]:
+def get_stops_from_routes(routes: Union[list[api.Route], None]) -> list[api.Stop]:
     """Returns a list of stops from a list of lines.
     """
-    if lines is None:
+    if routes is None:
         return get_all_stops()
     stops = []
-    for line in lines:
-        for route in line.routes:
-            for way in route.ways:
-                for stop in way.stops:
-                    if stop not in stops:
-                        stops.append(stop)
+    for route in routes:
+        for stop in route.stops.values():
+            if stop not in stops:
+                stops.append(stop)
     return stops
 
 
@@ -100,66 +101,65 @@ def get_all_stops(cache_dir="cache") -> list[api.Stop]:
             stops = pickle.load(f)
     else:
         stops = []
-        for line in api.get_all_lines():
-            for route in line.routes:
-                for way in route.ways:
-                    for stop in way.stops:
-                        if stop not in stops:
-                            stops.append(stop)
+        i = 0
+        j = 0
+        rt_i = 0
+        routes = api.get_all_routes()
+        rt_n = len(routes)
+        for route in routes:
+            rt_i += 1
+            # accessing route.stops will populate the stops dicts, so doing it
+            # in parallel is faster (TODO)
+            for stop in route.stops.values():
+                if stop not in stops:
+                    stops.append(stop)
+                    j += 1
+                i += 1
+                print(f"{i: 05d} stops processed, {j: 05d} unique stops found ({rt_i: 03d}/{rt_n: 03d} routes processed)")
         with open(cache_file, "wb") as f:
             pickle.dump(stops, f)
     return stops
 
-def get_ways_with_origin_before_destination(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line]) -> list[api.Way]:
-    """Returns a list of ways which have an origin stop before a destination stop.
-    """
-    ways = []
-    for line in lines:
-        for route in line.routes:
-            for way in route.ways:
-                for origin in origins:
-                    if not way.contains_stop(origin):
-                        continue
-                    for destination in destinations:
-                        if not way.contains_stop(destination):
-                            continue
-                        if way.in_sequence(origin, destination):
-                            ways.append(way)
-    return ways
-
-
-def get_trips(origins: list[api.Stop], destinations: list[api.Stop], lines: list[api.Line], day: str) -> list[api.Trip]:
-    """Returns a list of trips from a list of lines for a given day, which
-    contain an origin stop before a destination stop.
+def get_trips_with_origin_before_destination(origins: list[api.Stop], destinations: list[api.Stop], routes: list[api.Route]) -> list[api.Route]:
+    """Returns a list of trips which have an origin stop before a destination stop.
     """
     trips = []
-    for line in lines:
-        for route in line.routes:
-            for way in route.ways:
-                for origin in origins:
-                    if not way.contains_stop(origin):
-                        continue
-                    for destination in destinations:
-                        if not way.contains_stop(destination):
-                            continue
-                        if way.in_sequence(origin, destination):
-                            time_table = api.get_route_time_table(way._route, way, day)
-                            origin_times = []
-                            destination_times = []
-                            # get times for origin and destination stops
-                            for stop_time in time_table:
-                                if not isinstance(stop_time, api.StopTimes):
-                                    continue
-                                if stop_time.stop == origin:
-                                    origin_times = stop_time.times
-                                if stop_time.stop == destination:
-                                    destination_times = stop_time.times
-                            # get trips for each origin/destination time
-                            for origin_time, destination_time in zip(origin_times, destination_times):
-                                trips.append(api.Trip(origin, destination, origin_time, destination_time, way))
-
-    trips.sort(key=lambda x: int(x.origin_time.split(':')[0])*60 + int(x.origin_time.split(':')[1]))
+    for route in routes:
+        for origin in origins:
+            if not route.has_stop(origin):
+                continue
+            for destination in destinations:
+                if not route.has_stop(destination):
+                    continue
+                # check if there is a trip where the origin stop is before the destination stop
+                for trip in route.trips:
+                    if trip.in_sequence(origin, destination):
+                        trips.append(trip)
     return trips
+
+
+def get_trips(origins: list[api.Stop], destinations: list[api.Stop], routes: list[api.Route], day: str) -> list[api.TripAB]:
+    """Returns a list of tripABs from a list of lines for a given day, which
+    contain an origin stop before a destination stop.
+    """
+    tripABs = []
+    for route in routes:
+        for origin in origins:
+            if not route.has_stop(origin):
+                continue
+            for destination in destinations:
+                if not route.has_stop(destination):
+                    continue
+                for trip in route.trips:
+                    if day not in trip.dates:
+                        continue
+                    if trip.in_sequence(origin, destination):
+                        origin_time = trip.schedule[origin.id].departure_time
+                        destination_time = trip.schedule[destination.id].arrival_time
+                        tripABs.append(api.TripAB(origin, destination, origin_time, destination_time, route, trip))
+
+    tripABs.sort(key=lambda x: int(x.origin_time.split(':')[0])*60*60 + int(x.origin_time.split(':')[1])*60 + int(x.origin_time.split(':')[2]) )
+    return tripABs
 
 def join_times(times1: list[api.StopTimes]) -> list[api.StopTimes]:
     """Joins a list of StopTimes objects into a single list of times.

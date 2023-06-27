@@ -1,7 +1,7 @@
 import cmpy
 
 if __name__ == "__main__":
-    line_ids_carapinheira = [
+    route_ids_carapinheira = [
         "2106",
         "2110",
         "2136",
@@ -21,18 +21,18 @@ if __name__ == "__main__":
     ]
 
     # get all lines
-    lines = cmpy.get_all_lines()
+    routes = cmpy.get_all_routes()
 
     # prior knowledge of line ids may be used to reduce the number of lines to
     # be matched (optional)
-    lines = cmpy.match_lines_containing(
-        line_ids_carapinheira, lines, type='id')
+    routes = cmpy.match_routes_containing(
+        route_ids_carapinheira, routes, type='id')
 
     # get all unique stops from lines (shared stops are not duplicated)
     # there is usually one stop per way, which share the same name, but
     # have different ids
     # if provided with None, all stops are returned
-    stops = cmpy.get_stops_from_lines(None)
+    stops = cmpy.get_stops_from_routes(None)
 
     # get stops containing the match string
     # this may return many stops, so the user may need to further filter
@@ -42,29 +42,30 @@ if __name__ == "__main__":
 
     # day for which to get the time table
     # format: YYYY-MM-DD
-    day = "2023-01-23"
+    day = "2023-06-29"
 
+    day = day.replace('-', '')
     # get time table from origin to destination
     trips_c_l = cmpy.get_trips(
-        stops_carapinheira, stops_lisboa, lines, day=day)
+        stops_carapinheira, stops_lisboa, routes, day=day)
     trips_l_c = cmpy.get_trips(
-        stops_lisboa, stops_carapinheira, lines, day=day)
+        stops_lisboa, stops_carapinheira, routes, day=day)
 
     with open("carapinheira_lisboa.txt", "w", encoding='utf8') as f:
         f.write(f"Carapinheira -> Lisboa ({day}):\n")
         print(f"Carapinheira -> Lisboa ({day}):")
-        for trip in trips_c_l:
+        for tripAB in trips_c_l:
             f.write(
-                f"{trip.origin_time} -> {trip.destination_time}: {trip.way} - {trip.way._route.name} ({trip.way._route._line.id})\n")
+                f"{tripAB.origin_time} -> {tripAB.destination_time}: {tripAB.trip.direction} - {tripAB.route.long_name} ({tripAB.route.id})\n")
             print(
-                f"{trip.origin_time} -> {trip.destination_time}: {trip.way} - {trip.way._route.name} ({trip.way._route._line.id})")
+                f"{tripAB.origin_time} -> {tripAB.destination_time}: {tripAB.trip.direction} - {tripAB.route.long_name} ({tripAB.route.id})")
 
     with open("lisboa_carapinheira.txt", "w", encoding='utf8') as f:
         f.write(f"Lisboa -> Carapinheira ({day}):\n")
         print(f"Lisboa -> Carapinheira ({day}):")
-        for trip in trips_l_c:
+        for tripAB in trips_l_c:
             f.write(
-                f"{trip.origin_time} -> {trip.destination_time}: {trip.way.name} - {trip.way._route.name} ({trip.way._route._line.id})\n")
+                f"{tripAB.origin_time} -> {tripAB.destination_time}: {tripAB.trip.direction} - {tripAB.route.long_name} ({tripAB.route.id})\n")
             print(
-                f"{trip.origin_time} -> {trip.destination_time}: {trip.way.name} - {trip.way._route.name} ({trip.way._route._line.id})")
+                f"{tripAB.origin_time} -> {tripAB.destination_time}: {tripAB.trip.direction} - {tripAB.route.long_name} ({tripAB.route.id})")
             

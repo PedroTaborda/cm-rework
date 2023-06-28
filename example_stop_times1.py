@@ -4,7 +4,7 @@ import tracemalloc
 
 
 if __name__ == "__main__":
-    # tracemalloc.start()
+    tracemalloc.start()
     route_ids_carapinheira = [
         "2106",
         "2110",
@@ -25,10 +25,11 @@ if __name__ == "__main__":
     ]
 
     # get all lines
-    routes = cmpy.get_all_routes()
+    print("Getting all routes...", flush=True)
+    routes = cmpy.get_all_routes_ephemeral_processes()
 
     
-    # snapshot1 = tracemalloc.take_snapshot()
+    snapshot1 = tracemalloc.take_snapshot()
 
     # prior knowledge of line ids may be used to reduce the number of lines to
     # be matched (optional)
@@ -39,12 +40,14 @@ if __name__ == "__main__":
     # there is usually one stop per way, which share the same name, but
     # have different ids
     # if provided with None, all stops are returned
+    print("Getting all stops...", flush=True)
     stops = cmpy.get_stops_from_routes(None)
-    # snapshot2 = tracemalloc.take_snapshot()
+    snapshot2 = tracemalloc.take_snapshot()
 
     # get stops containing the match string
     # this may return many stops, so the user may need to further filter
     # the results
+    print("Matching stops...", flush=True)
     stops_carapinheira = cmpy.get_stops_containing('R Dom João V 51', stops)
     stops_lisboa = cmpy.get_stops_containing('Campo Grande', stops)
 
@@ -54,12 +57,14 @@ if __name__ == "__main__":
 
     day = day.replace('-', '')
     # get time table from origin to destination
+    print("Getting trips...", flush=True)
     trips_c_l = cmpy.get_trips(
         stops_carapinheira, stops_lisboa, routes, day=day)
     trips_l_c = cmpy.get_trips(
         stops_lisboa, stops_carapinheira, routes, day=day)
 
-    # snapshot3 = tracemalloc.take_snapshot()
+    snapshot3 = tracemalloc.take_snapshot()
+    print("Writing to file...")
     with open("carapinheira_lisboa.txt", "w", encoding='utf8') as f:
         f.write(f"Carapinheira -> Lisboa ({day}):\n")
         print(f"Carapinheira -> Lisboa ({day}):")
@@ -78,9 +83,9 @@ if __name__ == "__main__":
             print(
                 f"{tripAB.origin_time} -> {tripAB.destination_time}: {tripAB.trip.direction} - {tripAB.route.long_name} ({tripAB.route.id})")
 
-    # for stat in snapshot2.compare_to(snapshot1, 'lineno'):
-    #     print(stat)
-    # for stat in snapshot3.compare_to(snapshot2, 'lineno'):
-    #     print(stat)  
+    for stat in snapshot2.compare_to(snapshot1, 'lineno'):
+        print(stat)
+    for stat in snapshot3.compare_to(snapshot2, 'lineno'):
+        print(stat)  
 
-    # tracemalloc.stop()          
+    tracemalloc.stop()          

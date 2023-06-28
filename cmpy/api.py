@@ -6,6 +6,9 @@ import pickle
 import datetime
 from dataclasses import dataclass, field
 import msgspec
+import multiprocessing
+import itertools
+import sys
 
 json_decoder = msgspec.json.Decoder()
 
@@ -75,6 +78,16 @@ class Route:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def _sz(self) -> int:
+        size = 0
+        for trip in self.trips:
+            size += sys.getsizeof(trip)
+            for sched in trip.schedule.values():
+                size += sys.getsizeof(sched)
+        for stop in self.stops.values():
+            size += sys.getsizeof(stop)
+        return size + sys.getsizeof(self) + sys.getsizeof(self.stops) + sys.getsizeof(self.trips)
 
 @dataclass
 class TripAB:
@@ -250,6 +263,88 @@ def get_all_routes() -> list[Route]:
         route_text_color = route['route_text_color']
         routes.append(Route(route_id, route_short_name, route_long_name, route_color, route_text_color))
     
+    return routes
+
+
+def _process_chunk(chunk: list[dict]) -> list[Route]:
+    routes = []
+    for route in chunk:
+        route_id = route['route_id']
+        route_short_name = route['route_short_name']
+        route_long_name = route['route_long_name']
+        route_color = route['route_color']
+        route_text_color = route['route_text_color']
+        routes.append(Route(route_id, route_short_name, route_long_name, route_color, route_text_color))
+    return routes
+
+def get_all_routes_pool(chunksize: int=10, n_workers: int=4) -> list[Route]:
+    # in order for the JSON decoder to release all the memory used to the OS, it's
+    # necessary to run this in a subprocess
+    # not doing so will cause the memory to be kept by the parent process
+    # to prevent doing it all at once, we split the work into chunks of chunksize
+    # and run each chunk in a subprocess
+    # we process the chunks in parallel using n_workers processes
+    summary_url = "https://schedules.carrismetropolitana.pt/api/routes/summary"
+    try:
+        response = _cached_request(summary_url, "routes_summary", overwrite=False)
+    except requests.exceptions.ConnectionError:
+        print("Connection error")
+        return []
+
+    summary_json = response.json()
+
+    chunks = [summary_json[i:i + chunksize] for i in range(0, len(summary_json), chunksize)]
+
+    with multiprocessing.Pool(n_workers) as pool:
+        routes = pool.map(_process_chunk, chunks)
+        
+    return list(itertools.chain.from_iterable(routes))
+
+
+def _process_and_queue_chunk(chunk: list[dict], queue: multiprocessing.Queue) -> None:
+    routes = _process_chunk(chunk)
+    queue.put(routes)
+    # terminate the process
+    # import sys
+    # sys.exit(0)
+    
+
+def get_all_routes_ephemeral_processes(chunksize: int=10, workers: int=4) -> list[Route]:
+    # same as get_all_routes_pool, but using new processes for each chunk, ensuring
+    # that the memory is released to the OS
+    summary_url = "https://schedules.carrismetropolitana.pt/api/routes/summary"
+    try:
+        response = _cached_request(summary_url, "routes_summary", overwrite=False)
+    except requests.exceptions.ConnectionError:
+        print("Connection error")
+        return []
+
+    summary_json = response.json()
+
+    chunks = [summary_json[i:i + chunksize] for i in range(0, len(summary_json), chunksize)]
+    queue = multiprocessing.Queue()
+
+    routes = []
+    N = len(chunks)
+    i = 0
+    for j in range(0, N, workers):
+        i += workers
+        print(f"Processing chunks {i}/{N}", flush=True)
+        n_chunks = min(workers, N - j)
+        batch = chunks[j:j + n_chunks]
+        # flush
+        p: list[multiprocessing.Process] = []
+        for chunk in batch:
+            process = multiprocessing.Process(target=_process_and_queue_chunk, args=(chunk, queue))
+            p.append(process)
+        for process in p:
+            process.start()
+        for process in p:
+            routes.extend(queue.get())
+        for process in p:
+            process.join()
+
+
     return routes
 
 def get_route_stops_and_trips(route: Route) -> list[Trip]:

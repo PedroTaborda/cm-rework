@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Generator, Union
 import requests
 import urllib
 import os
@@ -9,10 +9,13 @@ import msgspec
 import multiprocessing
 import itertools
 import sys
+import sqlite3
 
 json_decoder = msgspec.json.Decoder()
 
 DAYS_FOR_STATIC_DATA = ["2023-06-06", "2023-01-31"]
+routes_database_file = os.path.join("cache", "routes.db")
+db = None
 
 @dataclass
 class Stop:
@@ -57,7 +60,6 @@ class Route:
     stops: dict[str, Stop] = field(init=False, default_factory=dict)
     trips: list["Trip"] = field(init=False, default_factory=list)
 
-    # post init
     def __post_init__(self):
         self._has_stops_and_trips = True
         self.trips = get_route_stops_and_trips(self)
@@ -265,7 +267,6 @@ def get_all_routes() -> list[Route]:
     
     return routes
 
-
 def _process_chunk(chunk: list[dict]) -> list[Route]:
     routes = []
     for route in chunk:
@@ -417,6 +418,69 @@ def get_route_stops_and_trips(route: Route) -> list[Trip]:
 
     return trips
 
+def get_all_routes_naive_generator() -> Generator[Route, None, None]:
+    summary_url = "https://schedules.carrismetropolitana.pt/api/routes/summary"
+    try:
+        response = _cached_request(summary_url, "routes_summary", overwrite=False)
+    except requests.exceptions.ConnectionError:
+        print("Connection error")
+        return
+
+    for route in json_decoder.decode(response.text):
+        route_id = route['route_id']
+        route_short_name = route['route_short_name']
+        route_long_name = route['route_long_name']
+        route_color = route['route_color']
+        route_text_color = route['route_text_color']
+        yield Route(route_id, route_short_name, route_long_name, route_color, route_text_color)
+
+def build_route_db():    
+    global db
+    if db is None:
+        # check if the database exists
+        if os.path.exists(routes_database_file):
+            db = sqlite3.connect(routes_database_file)
+            print("Found existing database")
+        else:
+            # build the database
+            print("Building database")
+            i = 0
+            db = sqlite3.connect(routes_database_file)
+            db.execute("CREATE TABLE routes (id TEXT PRIMARY KEY, route BLOB)")
+            db.commit()
+            for route in get_all_routes_naive_generator():
+                i += 1
+                print(f"Processing route {i}", end="\r")
+                idx = route.id
+                val = pickle.dumps(route)
+                db.execute("INSERT INTO routes (id, route) VALUES (?, ?)", (idx, val))
+            db.commit()
+            print("\nBuilt database")
+
+def get_route(route_id: str) -> Route:
+    global db
+    if db is None:
+        build_route_db()
+    cursor = db.execute("SELECT route FROM routes WHERE id = ?", (route_id,))
+    route = cursor.fetchone()
+    if route is None:
+        return None
+    else:
+        return pickle.loads(route[0])
+
+def get_all_routes_generator() -> Generator[Route, None, None]:
+    global db
+    if db is None:
+        build_route_db()
+    cursor = db.execute("SELECT route FROM routes")
+    # get 10 routes at a time, for memory efficiency
+    while True:
+        routes = cursor.fetchmany(1)
+        if len(routes) == 0:
+            break
+        for route in routes:
+            yield pickle.loads(route[0])
+
 def start_cache_renewal_worker(period_seconds: int=120):
     import threading
     import time
@@ -446,6 +510,10 @@ def start_cache_renewal_worker(period_seconds: int=120):
                 except requests.exceptions.ConnectionError:
                     print("Connection error for summary")
             i += 1
+            # update the database
+            db = sqlite3.connect("routes.db")
+            db.execute("UPDATE routes SET route = ? WHERE id = ?", (response.content, route_short_name))
+            db.commit()
             time.sleep(period_seconds)
 
     renewer = threading.Thread(target=worker, daemon=True)

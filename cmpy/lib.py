@@ -2,6 +2,7 @@ from . import api
 from typing import Union
 import pickle
 import os
+from dataclasses import dataclass, asdict
 
 
 def match_routes_containing(matches: Union[str, list[str]], routes_to_match: list[api.Route], type='name') -> list[api.Route]:
@@ -159,6 +160,54 @@ def get_trips(origins: list[api.Stop], destinations: list[api.Stop], routes: lis
                         tripABs.append(api.TripAB(origin, destination, origin_time, destination_time, route, trip))
 
     tripABs.sort(key=lambda x: int(x.origin_time.split(':')[0])*60*60 + int(x.origin_time.split(':')[1])*60 + int(x.origin_time.split(':')[2]) )
+    return tripABs
+
+def get_trips_light(origins: list[api.Stop], destinations: list[api.Stop], day: str) -> list[api.TripAB]:
+    tripABs = []
+    i=0
+    for route in api.get_all_routes_generator():
+        i+=1
+        print(f"Processing route {i}")
+        for origin in origins:
+            if not route.has_stop(origin):
+                continue
+            for destination in destinations:
+                if not route.has_stop(destination):
+                    continue
+                for trip in route.trips:
+                    if day not in trip.dates:
+                        continue
+                    if trip.in_sequence(origin, destination):
+                        origin_time = trip.schedule[origin.id].departure_time
+                        destination_time = trip.schedule[destination.id].arrival_time
+                        tripABs.append(api.TripAB(origin, destination, origin_time, destination_time, route, trip))
+
+    tripABs.sort(key=lambda x: int(x.origin_time.split(':')[0])*60*60 + int(x.origin_time.split(':')[1])*60 + int(x.origin_time.split(':')[2]) )
+    return tripABs
+
+db = None
+def get_trips_routes_db(origins: list[api.Stop], destinations: list[api.Stop], day: str) -> list[api.TripAB]:
+    """This is the most efficient implementation. The first time it is called,
+    it will take a long time to build the database, but subsequent calls will be
+    fast.
+    The database stores all the routes, and nothing else.
+    It uses the fact that routes are static and pickleable.
+    """
+    tripABs = []
+    for route in api.get_all_routes_generator():
+        for origin in origins:
+            if not route.has_stop(origin):
+                continue
+            for destination in destinations:
+                if not route.has_stop(destination):
+                    continue
+                for trip in route.trips:
+                    if day not in trip.dates:
+                        continue
+                    if trip.in_sequence(origin, destination):
+                        origin_time = trip.schedule[origin.id].departure_time
+                        destination_time = trip.schedule[destination.id].arrival_time
+                        tripABs.append(api.TripAB(origin, destination, origin_time, destination_time, route, trip))
     return tripABs
 
 def join_times(times1: list[api.StopTimes]) -> list[api.StopTimes]:

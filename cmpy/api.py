@@ -17,6 +17,7 @@ DAYS_FOR_STATIC_DATA = ["2023-06-06", "2023-01-31"]
 routes_database_file = os.path.join("cache", "routes.db")
 db = None
 
+
 @dataclass
 class Stop:
     id: str    # unique (number)
@@ -434,7 +435,7 @@ def get_all_routes_naive_generator() -> Generator[Route, None, None]:
         route_text_color = route['route_text_color']
         yield Route(route_id, route_short_name, route_long_name, route_color, route_text_color)
 
-def build_route_db():    
+def find_or_build_route_db():    
     global db
     if db is None:
         # check if the database exists
@@ -457,11 +458,12 @@ def build_route_db():
             db.commit()
             print("\nBuilt database")
 
+    return db
+
 def get_route(route_id: str) -> Route:
-    global db
-    if db is None:
-        build_route_db()
-    cursor = db.execute("SELECT route FROM routes WHERE id = ?", (route_id,))
+    new_db_connection = sqlite3.connect(routes_database_file)
+    cursor = new_db_connection.execute("SELECT route FROM routes")
+    cursor = new_db_connection.execute("SELECT route FROM routes WHERE id = ?", (route_id,))
     route = cursor.fetchone()
     if route is None:
         return None
@@ -469,10 +471,8 @@ def get_route(route_id: str) -> Route:
         return pickle.loads(route[0])
 
 def get_all_routes_generator() -> Generator[Route, None, None]:
-    global db
-    if db is None:
-        build_route_db()
-    cursor = db.execute("SELECT route FROM routes")
+    new_db_connection = sqlite3.connect(routes_database_file)
+    cursor = new_db_connection.execute("SELECT route FROM routes")
     # get 10 routes at a time, for memory efficiency
     while True:
         routes = cursor.fetchmany(1)
@@ -512,6 +512,9 @@ def start_cache_renewal_worker(period_seconds: int=120):
             i += 1
             route = get_route(route_short_name)
 
+            if route is None:
+                time.sleep(period_seconds)
+                continue
             route_id = route.id
             route_short_name = route.short_name
             route_long_name = route.long_name

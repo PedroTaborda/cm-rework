@@ -6,7 +6,8 @@ log_file = 'usr-log.txt'
 
 app = Flask(__name__)
 
-routes = cmpy.get_all_routes()
+db = cmpy.find_or_build_route_db()
+
 stops = cmpy.get_all_stops()
 sendable_stops = []
 for stop in stops:
@@ -52,8 +53,8 @@ def get_timetable():
     destinations = cmpy.get_stops_containing([destination.name], stops)
 
     # get time table from origin to destination
-    trips = cmpy.get_trips(
-        origins, destinations, routes, date.replace('-', ''))
+    trips = cmpy.get_trips_routes_db(
+        origins, destinations, date.replace('-', ''))
 
     # convert to sendable format
     sendable_trips = []

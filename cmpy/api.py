@@ -510,9 +510,21 @@ def start_cache_renewal_worker(period_seconds: int=120):
                 except requests.exceptions.ConnectionError:
                     print("Connection error for summary")
             i += 1
+            route = get_route(route_short_name)
+
+            route_id = route.id
+            route_short_name = route.short_name
+            route_long_name = route.long_name
+            route_color = route.color
+            route_text_color = route.text_color
+
+            # uses newly fetched cached data
+            new_route = Route(route_id, route_short_name, route_long_name, route_color, route_text_color)
+
+            print(f"Processed route {route_short_name} ({i} total)", end="\r")
             # update the database
             db = sqlite3.connect("routes.db")
-            db.execute("UPDATE routes SET route = ? WHERE id = ?", (response.content, route_short_name))
+            db.execute("UPDATE routes SET route = ? WHERE id = ?", (pickle.dumps(new_route), route_id))
             db.commit()
             time.sleep(period_seconds)
 

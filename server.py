@@ -68,6 +68,8 @@ def get_timetable():
                 'way': trip.trip.direction,
             }
         )
+    # sort by departure time
+    sendable_trips.sort(key=lambda x: x['t0'])
 
     raw_trips: dict = {
         'origin': {

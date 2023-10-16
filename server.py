@@ -92,6 +92,9 @@ def get_timetable():
 
     if raw is not None:
         return raw_trips.__str__()
+
+    if len(sendable_trips) == 0:
+        return render_template('timetable-empty.html', origin=origin, destination=destination, date=date)
     
     return render_template('timetable.html', origin=origin, destination=destination, trips=sendable_trips, date=date)
 

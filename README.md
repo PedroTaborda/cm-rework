@@ -1,3 +1,7 @@
+### Deprecated
+
+This project is deprecated. The API used by the Carris Metropolitana website has changed and better tools have been developed for end users. The data is now also available in popular apps like Google Maps. The hosted version of the web app no longer works but the code is still available for reference and the frontend can still be accessed.
+
 # Python API for Carris Metropolitana Bus Lines
 
 This is a Python API for Carris Metropolitana Bus Lines. It uses the API used by the [Carris Metropolitana website](https://www.carrismetropolitana.pt/horarios/). This project is not affiliated with Carris Metropolitana.
